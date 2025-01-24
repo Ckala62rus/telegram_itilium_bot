@@ -28,8 +28,10 @@ class Settings:
     # BOT_TOKEN
     BOT_TOKEN: str = os.getenv('TOKEN')
 
-    # LARAVEL_BACKEND
-    LARAVEL_API_URL: str = os.getenv('LARAVEL_API_URL')
+    # ITILIUM
+    ITILIUM_TEST_URL: str = os.getenv("ITILIUM_TEST_URL")
+    ITILIUM_LOGIN: str = os.getenv("ITILIUM_LOGIN")
+    ITILIUM_PASSWORD: str = os.getenv("ITILIUM_PASSWORD")
 
 
 # Декоратор lru_cache для хэширования конфига, что бы при следующих обращениях брался его кеш

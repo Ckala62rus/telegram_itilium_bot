@@ -70,10 +70,10 @@ async def main():
 
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.delete_my_commands(scope=BotCommandScopeAllPrivateChats())
-    # await bot.set_my_commands(
-    #     commands=private,
-    #     scope=BotCommandScopeAllPrivateChats()
-    # )
+    await bot.set_my_commands(
+        commands=private,
+        scope=BotCommandScopeAllPrivateChats()
+    )
     logger.debug('start polling')
     # await dp.start_polling(bot, allowed_updates=ALLOWED_UPDATES)
     try:

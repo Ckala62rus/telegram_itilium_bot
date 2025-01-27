@@ -1,8 +1,11 @@
+import json
 import logging
 
+import httpx
 from aiogram import types, Router, F
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.itilium_api import ItiliumBaseApi
@@ -88,8 +91,8 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
 
 @new_user_router.message(CreateNewIssue.description, F.text)
 async def set_description_for_issue(
-    message: types.Message,
-    state: FSMContext
+        message: types.Message,
+        state: FSMContext
 ):
     logger.debug("enter description for new issue")
 
@@ -100,15 +103,30 @@ async def set_description_for_issue(
     await state.update_data(description=message.text)
 
     logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
-    user_data_from_itilium = ItiliumBaseApi.get_employee_data_by_identifier(message, message.from_user.id)
+    user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
 
     if user_data_from_itilium is None:
         logger.debug("user not found in Itilium")
         await state.clear()
         await message.answer(
             text="Не удалось найти вас в системе ITILIUM",
-            reply_markup = types.ReplyKeyboardRemove()
+            reply_markup=types.ReplyKeyboardRemove()
         )
+
+    # send date to itilium api for create issue
+    response: Response = await ItiliumBaseApi.create_new_sc({
+        "UUID": user_data_from_itilium["UUID"],
+        "Description": message.text,
+        "shortDescription": message.text,
+    })
+
+    logger.debug(f"{response.status_code} | {response.text}")
+
+    if response.status_code == httpx.codes.OK:
+        return await message.answer(f"Ваша завка успешно создана!\n\r{json.loads(response.text)}")
+
+    return await message.answer(f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже")
+
 
 @new_user_router.message(F.text)
 async def magic_filter(message: types.Message):

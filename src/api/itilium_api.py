@@ -2,9 +2,10 @@ import json
 import logging
 import httpx
 from aiogram.types import Message
+from httpx import Response
 
 from config.configuration import settings
-
+from utils.helpers import Helpers
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +35,20 @@ class ItiliumBaseApi:
         """
         Метод поиска сотрудника на стенде ITILIUM по Telegram user_id или nickname
         :param message: обьект Aiogram
-        :param user_id: идентификатор пользователя в Telegram
-        :param attribute_code:
+        :param attribute_code: Атрибут для 1С Итилиум (обязательный параметр)
         :return: возвращает json-объект типа employee$employee или null
         """
         post_data = {attribute_code: message.from_user.id}
 
-        response = httpx.post(
-            # url-адрес для поиска сотрудника по его Telegram user_id
-            url=settings.ITILIUM_TEST_URL + "find_employee",
+        # response = httpx.post(
+        #     # url-адрес для поиска сотрудника по его Telegram user_id
+        #     url=settings.ITILIUM_TEST_URL + "find_employee",
+        #
+        #     data=post_data,
+        #     auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
+        # )
 
-            data=post_data,
-            auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
-        )
+        response: Response = await ItiliumBaseApi.send_request("POST", "find_employee", post_data)
 
         logger.debug(f"response code: {response.status_code} | response text: {response.text}")
 
@@ -56,3 +58,38 @@ class ItiliumBaseApi:
             await message.answer(f"Вы отсутствуете в Итилиуме. "
                                  f"Сообщите администратору ваш id {message.from_user.id} для добавления")
             return None
+
+    @staticmethod
+    async def create_new_sc(data: dict) -> Response:
+        """
+        Метод для создания нового обращения
+        :params data: словарь с данными
+        "return": Response httpx. Ответ с 1С Итилиум
+        """
+
+        logger.debug(f"send data {data}")
+
+        request_data = {
+            "client": data["UUID"],
+            "shorDescription": Helpers.prepare_short_description_for_sc(data['Description']),
+            "Description": data['Description']
+        }
+
+        return await ItiliumBaseApi.send_request("POST", "create_sc", request_data)
+
+    @staticmethod
+    async def send_request(method: str, url: str, data: dict) -> Response:
+        """
+        Базовый метод, обёртка над httpx
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                return httpx.request(
+                    method=method,
+                    url=settings.ITILIUM_TEST_URL + url,
+                    data=data,
+                    auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD),
+                    timeout=30.0
+                )
+        except Exception as e:
+            logger.exception(e)

@@ -123,9 +123,12 @@ async def set_description_for_issue(
     logger.debug(f"{response.status_code} | {response.text}")
 
     if response.status_code == httpx.codes.OK:
-        return await message.answer(f"Ваша завка успешно создана!\n\r{json.loads(response.text)}")
+        await message.answer(f"Ваша завка успешно создана!\n\r{json.loads(response.text)}")
+    else:
+        logger.debug(f"{response.text}")
+        await message.answer(f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже")
 
-    return await message.answer(f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже")
+    await state.clear()
 
 
 @new_user_router.message(F.text)

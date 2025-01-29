@@ -149,8 +149,24 @@ async def btn_accept(callback: types.CallbackQuery):
         await callback.answer("Во время согласования, произошла ошибка. Обратитесь к администратору")
 
     await callback.answer()
-    await callback.message.answer("Нажата кнопка согласования")
-    pass
+
+
+@new_user_router.callback_query(F.data.startswith("reject$"))
+async def btn_reject(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки "Отклонить"
+    Переводит согласование в статус "Отклонить"
+    Формирует сообщение о выполнении действия, либо об ошибке.
+    Формат текста по нажатию на кнопку согласовать 'reject$000001844'
+    """
+    try:
+        logger.debug(f"{callback.data}")
+        await ItiliumBaseApi.reject_callback_handler(callback)
+        await callback.answer()
+        await callback.message.answer("Отклонено")
+    except Exception as e:
+        logger.error(e)
+        await callback.answer("Во время согласования, произошла ошибка. Обратитесь к администратору")
 
 
 @new_user_router.message(F.text)

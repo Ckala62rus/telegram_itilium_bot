@@ -1,9 +1,11 @@
 import json
 import logging
 import httpx
-from aiogram.types import Message
+from aiogram import types
+from aiogram.types import Message, CallbackQuery
 from httpx import Response
 
+from api.urls import ApiUrls
 from config.configuration import settings
 from utils.helpers import Helpers
 
@@ -29,7 +31,7 @@ class ItiliumBaseApi:
 
     @staticmethod
     async def get_employee_data_by_identifier(
-        message: Message,
+        message: Message | CallbackQuery,
         attribute_code='telegram'
     ) -> dict | None:
         """
@@ -48,7 +50,7 @@ class ItiliumBaseApi:
         #     auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
         # )
 
-        response: Response = await ItiliumBaseApi.send_request("POST", "find_employee", post_data)
+        response: Response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, post_data)
 
         logger.debug(f"response code: {response.status_code} | response text: {response.text}")
 
@@ -75,10 +77,10 @@ class ItiliumBaseApi:
             "Description": data['Description']
         }
 
-        return await ItiliumBaseApi.send_request("POST", "create_sc", request_data)
+        return await ItiliumBaseApi.send_request("POST", ApiUrls.CREATE_SC, request_data)
 
     @staticmethod
-    async def send_request(method: str, url: str, data: dict) -> Response:
+    async def send_request(method: str, url: str, data: dict | None) -> Response:
         """
         Базовый метод, обёртка над httpx
         """
@@ -93,3 +95,24 @@ class ItiliumBaseApi:
                 )
         except Exception as e:
             logger.exception(e)
+
+    @staticmethod
+    async def accept_callback_handler(callback: types.CallbackQuery) -> Response:
+        return await ItiliumBaseApi._accept_or_reject_callback(callback, "accept")
+
+    @staticmethod
+    async def reject_callback_handler(callback: types.CallbackQuery) -> Response:
+        return await ItiliumBaseApi._accept_or_reject_callback(callback, "reject")
+
+    @staticmethod
+    async def _accept_or_reject_callback(callback: types.CallbackQuery, state: str) -> Response:
+        """
+        Метод для согласования или отклонения обращения
+        :state: "accept" or "reject"
+        """
+        return await (ItiliumBaseApi
+            .send_request("POST", ApiUrls.ACCEPT_OR_REJECT.format(
+                telegram_user_id=callback.from_user.id,
+                vote_number=callback.data[7:],
+                state=state
+        ), None))

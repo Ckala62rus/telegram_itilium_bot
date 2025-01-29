@@ -131,16 +131,23 @@ async def set_description_for_issue(
     await state.clear()
 
 
-@new_user_router.callback_query(StateFilter(None))
+@new_user_router.callback_query(F.data.startswith("accept$"))
 async def btn_accept(callback: types.CallbackQuery):
     """
     Обработчик кнопки "Согласовать"
     Переводит согласование в статус "Согласовано"
     Формирует сообщение о выполнении действия, либо об ошибке.
+    Формат текста по нажатию на кнопку согласовать 'accept$000001844'
     """
-    btn_accept = callback.data
-    print(btn_accept)
-    # 'accept$000001844'
+    try:
+        logger.debug(f"{callback.data}")
+        await ItiliumBaseApi.accept_callback_handler(callback)
+        await callback.answer()
+        await callback.message.answer("Согласовано")
+    except Exception as e:
+        logger.error(e)
+        await callback.answer("Во время согласования, произошла ошибка. Обратитесь к администратору")
+
     await callback.answer()
     await callback.message.answer("Нажата кнопка согласования")
     pass

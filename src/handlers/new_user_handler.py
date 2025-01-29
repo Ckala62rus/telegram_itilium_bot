@@ -131,6 +131,21 @@ async def set_description_for_issue(
     await state.clear()
 
 
+@new_user_router.callback_query(StateFilter(None))
+async def btn_accept(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки "Согласовать"
+    Переводит согласование в статус "Согласовано"
+    Формирует сообщение о выполнении действия, либо об ошибке.
+    """
+    btn_accept = callback.data
+    print(btn_accept)
+    # 'accept$000001844'
+    await callback.answer()
+    await callback.message.answer("Нажата кнопка согласования")
+    pass
+
+
 @new_user_router.message(F.text)
 async def magic_filter(message: types.Message):
     await message.answer(text="Я не понимаю Вашей команды (((")

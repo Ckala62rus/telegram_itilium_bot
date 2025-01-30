@@ -140,7 +140,7 @@ async def btn_accept(callback: types.CallbackQuery):
     Формат текста по нажатию на кнопку согласовать 'accept$000001844'
     """
     try:
-        logger.debug(f"{callback.data}")
+        logger.debug(f"{callback.from_user.id} | {callback.data}")
         await ItiliumBaseApi.accept_callback_handler(callback)
         await callback.answer()
         await callback.message.answer("Согласовано")
@@ -160,13 +160,22 @@ async def btn_reject(callback: types.CallbackQuery):
     Формат текста по нажатию на кнопку согласовать 'reject$000001844'
     """
     try:
-        logger.debug(f"{callback.data}")
+        logger.debug(f"{callback.from_user.id} | {callback.data}")
         await ItiliumBaseApi.reject_callback_handler(callback)
         await callback.answer()
         await callback.message.answer("Отклонено")
     except Exception as e:
         logger.error(e)
         await callback.answer("Во время согласования, произошла ошибка. Обратитесь к администратору")
+
+
+@new_user_router.callback_query()
+async def btn_reject(callback: types.CallbackQuery):
+    a = callback.data
+    # show_sc$0000023773 при нажатии на кнопку "Открыть заявку"
+    # reply$0000023773 при нажатии на кнопку "Добавить комментарий"
+    logger.debug(f"{callback.from_user.id} | {callback.data}")
+    await callback.answer()
 
 
 @new_user_router.message(F.text)

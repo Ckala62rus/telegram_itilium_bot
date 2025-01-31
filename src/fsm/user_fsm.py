@@ -9,3 +9,7 @@ class CreateNewIssue(StatesGroup):
         'AddProduct:price': 'Введите стоимость заново:',
         'AddProduct:image': 'Этот стейт последний, поэтому...',
     }
+
+
+class CreateComment(StatesGroup):
+    comment = State()

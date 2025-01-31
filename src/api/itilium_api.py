@@ -31,8 +31,8 @@ class ItiliumBaseApi:
 
     @staticmethod
     async def get_employee_data_by_identifier(
-        message: Message | CallbackQuery,
-        attribute_code='telegram'
+            message: Message | CallbackQuery,
+            attribute_code='telegram'
     ) -> dict | None:
         """
         Метод поиска сотрудника на стенде ITILIUM по Telegram user_id или nickname
@@ -41,14 +41,6 @@ class ItiliumBaseApi:
         :return: возвращает json-объект типа employee$employee или null
         """
         post_data = {attribute_code: message.from_user.id}
-
-        # response = httpx.post(
-        #     # url-адрес для поиска сотрудника по его Telegram user_id
-        #     url=settings.ITILIUM_TEST_URL + "find_employee",
-        #
-        #     data=post_data,
-        #     auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
-        # )
 
         response: Response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, post_data)
 
@@ -111,8 +103,20 @@ class ItiliumBaseApi:
         :state: "accept" or "reject"
         """
         return await (ItiliumBaseApi
-            .send_request("POST", ApiUrls.ACCEPT_OR_REJECT.format(
-                telegram_user_id=callback.from_user.id,
-                vote_number=callback.data[7:],
-                state=state
+                      .send_request("POST", ApiUrls.ACCEPT_OR_REJECT.format(
+            telegram_user_id=callback.from_user.id,
+            vote_number=callback.data[7:],
+            state=state
         ), None))
+
+    @staticmethod
+    async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response:
+        return await (ItiliumBaseApi
+        .send_request(
+            "POST",
+            ApiUrls.FIND_SC.format(
+                telegram_user_id=telegram_user_id,
+                sc_number=sc_number
+            ),
+            None
+        ))

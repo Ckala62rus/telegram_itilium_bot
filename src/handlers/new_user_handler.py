@@ -254,7 +254,10 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query()
-async def btn_reject(callback: types.CallbackQuery):
+async def btn_all_callback(callback: types.CallbackQuery):
+    """
+    Обработчик ловит любые Callback
+    """
     a = callback.data
     # show_sc$0000023773 при нажатии на кнопку "Открыть заявку"
     # reply$0000023773 при нажатии на кнопку "Добавить комментарий"

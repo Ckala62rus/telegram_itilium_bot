@@ -13,3 +13,4 @@ class CreateNewIssue(StatesGroup):
 
 class CreateComment(StatesGroup):
     comment = State()
+    sc_id = State()

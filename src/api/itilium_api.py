@@ -102,21 +102,57 @@ class ItiliumBaseApi:
         Метод для согласования или отклонения обращения
         :state: "accept" or "reject"
         """
-        return await (ItiliumBaseApi
+        response = await (ItiliumBaseApi
                       .send_request("POST", ApiUrls.ACCEPT_OR_REJECT.format(
             telegram_user_id=callback.from_user.id,
             vote_number=callback.data[7:],
             state=state
         ), None))
 
+        await callback.message.edit_reply_markup()
+
+        return response
+
     @staticmethod
-    async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response:
-        return await (ItiliumBaseApi
+    async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response | None:
+
+        logger.info(f"make request to find sc by id telegram_user_id: "
+                    f"{telegram_user_id} "
+                    f"sc_number: {sc_number} "
+                    f"url {ApiUrls.FIND_SC}"
+        )
+        response = await (ItiliumBaseApi
         .send_request(
             "POST",
             ApiUrls.FIND_SC.format(
                 telegram_user_id=telegram_user_id,
                 sc_number=sc_number
+            ),
+            None
+        ))
+
+        logger.debug(f"{response.status_code} | {response.text}")
+
+        if response.status_code == httpx.codes.OK:
+            return response.json()
+
+        return None
+
+    @staticmethod
+    async def add_comment_to_sc(
+        telegram_user_id: int,
+        comment: str,
+        sc_number: str,
+    ) -> Response:
+        logger.info(f"added new comment sc {sc_number} | telegram_user_id: {telegram_user_id} | comment: {comment}")
+
+        return await (ItiliumBaseApi
+        .send_request(
+            "POST",
+            ApiUrls.ADD_COMMENT_TO_SC.format(
+                telegram_user_id=telegram_user_id,
+                source=sc_number,
+                comment_text=comment
             ),
             None
         ))

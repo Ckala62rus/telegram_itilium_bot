@@ -169,6 +169,90 @@ async def btn_reject(callback: types.CallbackQuery):
         await callback.answer("Во время согласования, произошла ошибка. Обратитесь к администратору")
 
 
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("reply$"))
+async def btn_reply_for_comment(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик кнопки "Добавить комментарий", когда пользователю приходит сообщение о согласовании
+    (Кнопки в сообщении "Открыть заявку" и "Добавить комментарий")
+    """
+    logger.debug(f"callback reply$ {callback.from_user.id} | {callback.data}")
+    await callback.answer()
+    await callback.message.answer(
+        "Введите коментарий или нажмите кнопку отмена.",
+        reply_markup=get_keyboard(str(UserButtonText.CANCEL))
+    )
+    await state.set_state(CreateComment.comment)
+    await state.update_data(sc_id=callback.data[6:])
+
+
+@new_user_router.message(CreateComment.comment, F.text)
+async def set_comment_for_sc(
+        message: types.Message,
+        state: FSMContext
+):
+    data = await state.get_data()
+    logger.debug(f"comment: {message.text}")
+    logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
+
+    response: Response = await ItiliumBaseApi.add_comment_to_sc(
+        telegram_user_id=message.from_user.id,
+        comment=message.text,
+        sc_number=data["sc_id"]
+    )
+
+    await state.clear()
+    await message.answer(
+        "Комментарий добавлен",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("show_sc$"))
+async def show_sc_info_callback(callback: types.CallbackQuery):
+    """
+    Метод, осуществляющий вывод информации о заявке
+    """
+    logger.debug(f"{callback.data}")
+    sc_number = callback.data[8:]
+    logger.info(f"{sc_number}")
+    response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+    await callback.answer()
+
+    if response is None:
+        return await callback.message.answer(f"Заявка с номером {sc_number} не найдена")
+
+    # Формируем текст сообщения
+    message_text = Helpers.prepare_sc(response)
+
+    if response["state"] != 'registered':
+        btn = get_callback_btns(
+            btns={
+                "Скрыть информацию ↩️": "del_message",
+                "Взять в работу ️ 🛠": "to_work{0}".format(sc_number),
+            }
+        )
+    else:
+        btn = get_callback_btns(
+            btns={
+                "Скрыть информацию ↩️": "del_message",
+            }
+        )
+
+    await callback.message.answer(
+        text=message_text,
+        reply_markup= btn,
+        parse_mode='HTML'
+    )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("del_message"))
+async def show_sc_info_callback(callback: types.CallbackQuery):
+    await callback.message.delete()
+
+
 @new_user_router.callback_query()
 async def btn_reject(callback: types.CallbackQuery):
     a = callback.data

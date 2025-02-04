@@ -1,3 +1,12 @@
+import logging
+
+from aiogram.types import Message
+from aiogram import Bot
+
+
+logger = logging.getLogger(__name__)
+
+
 class Helpers:
 
     def prepare_short_description_for_sc(sc_description: str):
@@ -57,3 +66,31 @@ class Helpers:
         for key in sc_attr:
             output_data += (str(sc_attr[key]) + '\n\r')
         return output_data
+
+    @staticmethod
+    async def get_file_info(message: Message, bot: Bot) -> str | None:
+        file_id = None
+        file_unique_id = None
+
+        if message.voice:
+            file_id = message.voice[-1].file_id
+            file_unique_id = message.voice[-1].file_unique_id
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            file_unique_id = message.photo[-1].file_unique_id
+        if message.video:
+            file_id = message.video[-1].file_id
+            file_unique_id = message.video[-1].file_unique_id
+        if message.document:
+            file_id = message.document[-1].file_id
+            file_unique_id = message.document[-1].file_unique_id
+
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+
+        logger.debug(f"file_id | {file_id}")
+        logger.debug(f"file_unique_id | {file_unique_id}")
+        logger.debug(f"file | {file}")
+        logger.debug(f"file_path | {file_path}")
+
+        return file_path

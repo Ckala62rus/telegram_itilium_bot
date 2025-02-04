@@ -42,3 +42,4 @@ class UserButtonText(StrEnum):
     CHOOSE_MENY = "Выберите необходимый пункт меню:"
     CANCEL = "отмена",
     ACTIONS_CANCELED = "Действия отменены"
+    SEND_COMMENT = "Отправить комментарий"

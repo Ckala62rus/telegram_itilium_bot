@@ -1,8 +1,10 @@
 import json
 import logging
+import pathlib
+from pathlib import Path
 
 import httpx
-from aiogram import types, Router, F
+from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from httpx import Response
@@ -11,11 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
 from filters.chat_types import ChatTypeFilter
-from fsm.user_fsm import CreateNewIssue
+from fsm.user_fsm import CreateNewIssue, CreateComment, ListNames
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
 from services.user_private_service import base_start_handler
+from utils.helpers import Helpers
 
 new_user_router = Router()
 new_user_router.message.filter(ChatTypeFilter(['private']))
@@ -117,16 +120,22 @@ async def set_description_for_issue(
     response: Response = await ItiliumBaseApi.create_new_sc({
         "UUID": user_data_from_itilium["UUID"],
         "Description": message.text,
-        "shortDescription": message.text,
+        "shortDescription": Helpers.prepare_short_description_for_sc(message.text),
     })
 
     logger.debug(f"{response.status_code} | {response.text}")
 
     if response.status_code == httpx.codes.OK:
-        await message.answer(f"Ваша завка успешно создана!\n\r{json.loads(response.text)}")
+        await message.answer(
+            text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
     else:
         logger.debug(f"{response.text}")
-        await message.answer(f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже")
+        await message.answer(
+            text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
 
     await state.clear()
 
@@ -162,7 +171,6 @@ async def btn_reject(callback: types.CallbackQuery):
     try:
         logger.debug(f"{callback.from_user.id} | {callback.data}")
         await ItiliumBaseApi.reject_callback_handler(callback)
-        await callback.answer()
         await callback.message.answer("Отклонено")
     except Exception as e:
         logger.error(e)
@@ -171,8 +179,8 @@ async def btn_reject(callback: types.CallbackQuery):
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("reply$"))
 async def btn_reply_for_comment(
-    callback: types.CallbackQuery,
-    state: FSMContext
+        callback: types.CallbackQuery,
+        state: FSMContext
 ):
     """
     Обработчик кнопки "Добавить комментарий", когда пользователю приходит сообщение о согласовании
@@ -181,19 +189,68 @@ async def btn_reply_for_comment(
     logger.debug(f"callback reply$ {callback.from_user.id} | {callback.data}")
     await callback.answer()
     await callback.message.answer(
-        "Введите коментарий или нажмите кнопку отмена.",
-        reply_markup=get_keyboard(str(UserButtonText.CANCEL))
+        "Введите коментарий или добавьте картинку. Для отмены, нажмите кнопку 'Отмена'",
+        reply_markup=get_keyboard(
+            str(UserButtonText.CANCEL),
+            str(UserButtonText.SEND_COMMENT)
+        )
     )
     await state.set_state(CreateComment.comment)
     await state.update_data(sc_id=callback.data[6:])
 
 
+@new_user_router.message(StateFilter(CreateComment.files))
+@new_user_router.message(F.text)
+@new_user_router.message(F.photo)
+@new_user_router.message(F.video)
+@new_user_router.message(F.voice)
+@new_user_router.message(F.document)
+async def test_filter(
+        message: types.Message,
+        state: FSMContext,
+        bot: Bot
+):
+    data = await state.get_data()
+
+    if (
+            message.photo or
+            message.video or
+            message.voice or
+            message.document
+    ) is not None:
+        file_path = await Helpers.get_file_info(message, bot)
+        names: list = data.get("files", [])
+
+        logger.debug(f"files: {names}")
+
+        if names is None:
+            await state.update_data(names=[])
+
+        # names.append(file_path)
+        names.append({
+            "filename": file_path.split("/")[-1],  # file_13.jpg
+            "file": file_path  # photos/file_13.jpg
+        })
+
+        await message.answer("Файл подготовлен к отправке")
+        return
+
+    await state.update_data(comment=message.text)
+    await message.answer("Комментарий подготовлен к отправке")
+
+
+@new_user_router.message(CreateComment.comment, F.text.casefold() == str(UserButtonText.SEND_COMMENT))
+async def set_comment_for_sc(
+        message: types.Message,
+        state: FSMContext
+):
 @new_user_router.message(CreateComment.comment, F.text)
 async def set_comment_for_sc(
         message: types.Message,
         state: FSMContext
 ):
     data = await state.get_data()
+
     logger.debug(f"comment: {message.text}")
     logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
 
@@ -243,7 +300,7 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
     await callback.message.answer(
         text=message_text,
-        reply_markup= btn,
+        reply_markup=btn,
         parse_mode='HTML'
     )
 
@@ -265,6 +322,194 @@ async def btn_all_callback(callback: types.CallbackQuery):
     await callback.answer()
 
 
+# @new_user_router.message(F.photo)
+# async def magic_filter_photo(
+#         message: types.Message,
+#         bot: Bot,
+#         state: FSMContext
+# ):
+#     current_state = await state.get_state()
+#     logger.debug(f"state {current_state}")
+#
+#     state_data = await state.get_data()
+#     file_id = message.photo[-1].file_id
+#     file_unique_id = message.photo[-1].file_unique_id
+#
+#     file = await bot.get_file(file_id)
+#     file_path = file.file_path
+#
+#     logger.debug(f"file_id | {file_id}")
+#     logger.debug(f"file_unique_id | {file_unique_id}")
+#     logger.debug(f"file | {file}")
+#     logger.debug(f"file_path | {file_path}")
+#
+#     # Save file to disc
+#     # path_to_save = pathlib.Path(__file__).parent.resolve().parent / "files/photos" / file_path.split("/")[-1]
+#     # await bot.download_file(file_path, path_to_save)
+#     # await bot.download_file(file_path, file_path.split("/")[-1])
+#
+#     # (Photo) ('photos/file_0.jpg') https://api.telegram.org/bot<bot_token>/getFile?file_id=the_file_id
+#     await message.answer("photo")
+
+
+# @new_user_router.message(F.document)
+# async def magic_filter(
+#         message: types.Message,
+#         bot: Bot
+# ):
+#     file_id = message.document.file_id
+#     file_unique_id = message.document.file_unique_id
+#
+#     file = await bot.get_file(file_id)
+#     file_path = file.file_path
+#
+#     logger.debug(f"file_id | {file_id}")
+#     logger.debug(f"file_unique_id | {file_unique_id}")
+#     logger.debug(f"file | {file}")
+#     logger.debug(f"file_path | {file_path}")
+#
+#     path_to_save = pathlib.Path(__file__).parent.resolve().parent / "files/documents" / file_path.split("/")[-1]
+#     await bot.download_file(file_path, path_to_save)
+#     # await bot.download_file(file_path, file_path.split("/")[-1])
+#
+#     await message.answer("file")
+
+
+# @new_user_router.message(F.video)
+# async def magic_filter(
+#         message: types.Message,
+#         bot: Bot
+# ):
+#     file_id = message.video.file_id
+#     file_unique_id = message.video.file_unique_id
+#
+#     file = await bot.get_file(file_id)
+#     file_path = file.file_path
+#
+#     logger.debug(f"file_id | {file_id}")
+#     logger.debug(f"file_unique_id | {file_unique_id}")
+#     logger.debug(f"file | {file}")
+#     logger.debug(f"file_path | {file_path}")
+#
+#     await message.answer("video")
+
+
+# @new_user_router.message(F.voice)
+# async def magic_filter(
+#         message: types.Message,
+#         bot: Bot
+# ):
+#     file_id = message.voice.file_id
+#     file_unique_id = message.voice.file_unique_id
+#
+#     file = await bot.get_file(file_id)
+#     file_path = file.file_path
+#
+#     logger.debug(f"file_id | {file_id}")
+#     logger.debug(f"file_unique_id | {file_unique_id}")
+#     logger.debug(f"file | {file}")
+#     logger.debug(f"file_path | {file_path}")
+#
+#     await message.answer("voice")
+
+
+# START STATE
+# @new_user_router.message(StateFilter(None), F.text)
+# async def test_filter(
+#         message: types.Message,
+#         state: FSMContext
+# ):
+#     await state.set_state(ListNames.files)
+#     await state.update_data(files=[])
+#     await state.set_state(ListNames.comment)
+#     await message.answer("FSM start")
+
+
+# @new_user_router.message(StateFilter(ListNames.files))
+# @new_user_router.message(F.text)
+# @new_user_router.message(F.photo)
+# @new_user_router.message(F.video)
+# @new_user_router.message(F.voice)
+# @new_user_router.message(F.document)
+# async def test_filter(
+#         message: types.Message,
+#         state: FSMContext,
+#         bot: Bot
+# ):
+#     data = await state.get_data()
+#
+#     if (
+#             message.photo or
+#             message.video or
+#             message.voice or
+#             message.document
+#     ) is not None:
+#         file_path = await Helpers.get_file_info(message, bot)
+#         names: list = data.get("files", [])
+#
+#         logger.debug(f"files: {names}")
+#
+#         if names is None:
+#             await state.update_data(names=[])
+#
+#         # names.append(file_path)
+#         names.append({
+#             "filename": file_path.split("/")[-1],  # file_13.jpg
+#             "file": file_path  # photos/file_13.jpg
+#         })
+#
+#         await message.answer("Файл подготовлен к отправке")
+#         return
+#
+#     await state.update_data(comment=message.text)
+#     await message.answer("Комментарий подготовлен к отправке")
+
+# END STATE
+
 @new_user_router.message(F.text)
-async def magic_filter(message: types.Message):
+async def magic_filter(
+    message: types.Message,
+    state: FSMContext
+):
+    """
+    Магический фильтр, который ловит все необработанные сообщения.
+    """
+    # try:
+    #     async with httpx.AsyncClient() as client:
+    #         json_data = json.dumps([
+    #             {
+    #                 'filename': 'file.jpg',
+    #                 'file': 'photos/file.jpg',
+    #             },
+    #             {
+    #                 'filename': 'document.exe',
+    #                 'file': 'documents/document.exe',
+    #             },
+    #             {
+    #                 'filename': 'video.mp4',
+    #                 'file': 'videos/video.mp4',
+    #             },
+    #             {
+    #                 'filename': 'voice.oga',
+    #                 'file': 'voice/voice.oga',
+    #             },
+    #         ], )
+    #
+    #         # response = await client.request(
+    #         #     headers={
+    #         #         'Content-Type': 'multipart/form-data',
+    #         #     },
+    #         #     method="POST",
+    #         #     # url="http://telegrambot_api_nginx/api/test",
+    #         #     url="http://telegrambot_api_nginx/api/test",
+    #         #     data={
+    #         #         "description": "lorem ipsum dollar sit amet",
+    #         #         "files": json_data
+    #         #     },
+    #         #     timeout=30.0
+    #         # )
+    #         #
+    #         # logger.debug(f"status {response.status_code} | {response.text}")
+    # except Exception as e:
+    #     logger.exception(e)
     await message.answer(text="Я не понимаю Вашей команды (((")

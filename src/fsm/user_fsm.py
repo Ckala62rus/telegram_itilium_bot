@@ -13,4 +13,5 @@ class CreateNewIssue(StatesGroup):
 
 class CreateComment(StatesGroup):
     comment = State()
+    files = State()
     sc_id = State()

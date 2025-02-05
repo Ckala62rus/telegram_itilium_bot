@@ -86,6 +86,7 @@ class ItiliumBaseApi:
                     timeout=30.0
                 )
         except Exception as e:
+            logger.debug(f"error for {method} {url} {data}")
             logger.exception(e)
 
     @staticmethod
@@ -143,16 +144,33 @@ class ItiliumBaseApi:
         telegram_user_id: int,
         comment: str,
         sc_number: str,
+        files: list
     ) -> Response:
         logger.info(f"added new comment sc {sc_number} | telegram_user_id: {telegram_user_id} | comment: {comment}")
+
+        url = ApiUrls.ADD_COMMENT_TO_SC.format(
+                telegram_user_id=telegram_user_id,
+                source=sc_number,
+                comment_text=comment
+            )
+
+        logger.debug(f"url: {url}")
+        logger.debug(f"comment: {comment}")
+
+        data: dict | None = None
+
+        if len(files) > 0:
+            url_params = ";".join(files)
+            url += f"&files={url_params}"
+            logger.debug(f"url: {url}")
+
+            # data = dict()
+            # data["files"] = json.dumps(files)
+            # logger.debug(f"files to send itilium > {json.dumps(files)}")
 
         return await (ItiliumBaseApi
         .send_request(
             "POST",
-            ApiUrls.ADD_COMMENT_TO_SC.format(
-                telegram_user_id=telegram_user_id,
-                source=sc_number,
-                comment_text=comment
-            ),
-            None
+            url,
+            data
         ))

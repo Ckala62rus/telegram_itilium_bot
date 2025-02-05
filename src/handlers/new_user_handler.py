@@ -195,8 +195,40 @@ async def btn_reply_for_comment(
             str(UserButtonText.SEND_COMMENT)
         )
     )
-    await state.set_state(CreateComment.comment)
+    await state.set_state(CreateComment.files)
     await state.update_data(sc_id=callback.data[6:])
+    await state.update_data(files=[])
+
+
+@new_user_router.message(F.text == str(UserButtonText.SEND_COMMENT))
+async def send_comment_for_sc_to_itilium(
+        message: types.Message,
+        state: FSMContext
+):
+    data: dict = await state.get_data()
+
+    current_state = await state.get_state()
+    logger.debug(f"state {current_state}")
+
+    logger.debug(f"comment: {message.text}")
+    # logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
+    logger.debug(f"files for comment: {data['files']}")
+
+    response: Response = await ItiliumBaseApi.add_comment_to_sc(
+        telegram_user_id=message.from_user.id,
+        # comment=message.text,
+        comment=data.get("comment", 'no comment'),
+        sc_number=data["sc_id"],
+        files=data["files"]
+    )
+
+    logger.debug("send comment to 1C itilium")
+
+    await state.clear()
+    await message.answer(
+        text='Комментарий добавлен',
+        reply_markup=types.ReplyKeyboardRemove()
+    )
 
 
 @new_user_router.message(StateFilter(CreateComment.files))
@@ -219,18 +251,19 @@ async def test_filter(
             message.document
     ) is not None:
         file_path = await Helpers.get_file_info(message, bot)
-        names: list = data.get("files", [])
+        files: list = data.get("files", [])
 
-        logger.debug(f"files: {names}")
+        logger.debug(f"files: {files}")
 
-        if names is None:
+        if files is None:
             await state.update_data(names=[])
 
-        # names.append(file_path)
-        names.append({
-            "filename": file_path.split("/")[-1],  # file_13.jpg
-            "file": file_path  # photos/file_13.jpg
-        })
+        # names.append({
+        #     "filename": file_path.split("/")[-1],  # file_13.jpg
+        #     "file": file_path  # photos/file_13.jpg
+        # })
+
+        files.append(file_path)
 
         await message.answer("Файл подготовлен к отправке")
         return
@@ -239,11 +272,44 @@ async def test_filter(
     await message.answer("Комментарий подготовлен к отправке")
 
 
-@new_user_router.message(CreateComment.comment, F.text.casefold() == str(UserButtonText.SEND_COMMENT))
-async def set_comment_for_sc(
-        message: types.Message,
-        state: FSMContext
-):
+# @new_user_router.message(StateFilter(CreateComment.files))
+# async def set_comment_for_sc(
+#         message: types.Message,
+#         state: FSMContext,
+#         bot: Bot
+# ):
+#     current_state = await state.get_state()
+#     logger.debug(f"state {current_state}")
+#
+#     file_id = message.photo[-1].file_id
+#     file_unique_id = message.photo[-1].file_unique_id
+#
+#     file = await bot.get_file(file_id)
+#     file_path = file.file_path
+#     filename = file_path.split("/")[-1]
+#
+#     logger.debug(f"file_id | {file_id}")
+#     logger.debug(f"file_unique_id | {file_unique_id}")
+#     logger.debug(f"file | {file}")
+#     logger.debug(f"file_path | {file_path}")
+#
+#     state_data: dict = await state.get_data()
+#
+#     exist_key_files: list | None = state_data.get("files", [])
+#
+#     if exist_key_files is None:
+#         await state.update_data(files=[])
+#
+#     files: list = state_data["files"]
+#
+#     files.append({
+#         "filename": "file.jpg",
+#         "file": "photos/file.jpg",
+#     })
+#
+#     await state.update_data(files=files)
+
+
 @new_user_router.message(CreateComment.comment, F.text)
 async def set_comment_for_sc(
         message: types.Message,
@@ -495,21 +561,22 @@ async def magic_filter(
     #             },
     #         ], )
     #
-    #         # response = await client.request(
-    #         #     headers={
-    #         #         'Content-Type': 'multipart/form-data',
-    #         #     },
-    #         #     method="POST",
-    #         #     # url="http://telegrambot_api_nginx/api/test",
-    #         #     url="http://telegrambot_api_nginx/api/test",
-    #         #     data={
-    #         #         "description": "lorem ipsum dollar sit amet",
-    #         #         "files": json_data
-    #         #     },
-    #         #     timeout=30.0
-    #         # )
-    #         #
-    #         # logger.debug(f"status {response.status_code} | {response.text}")
+    #         response = await client.request(
+    #             # headers={
+    #             #     'Content-Type': 'multipart/form-data',
+    #             # },
+    #             method="POST",
+    #             url="http://telegrambot_api_nginx/api/test",
+    #             data={
+    #                 "description": "lorem ipsum dollar sit amet",
+    #                 # "files": json_data
+    #                 "files": '[{"filename": "file_14.jpg", "file": "photos/file_14.jpg"}, {"filename": "file_17.jpg", '
+    #                          '"file": "photos/file_17.jpg"}]'
+    #             },
+    #             timeout=30.0
+    #         )
+    #
+    #         logger.debug(f"status {response.status_code} | {response.text}")
     # except Exception as e:
     #     logger.exception(e)
     await message.answer(text="Я не понимаю Вашей команды (((")

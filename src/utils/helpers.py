@@ -69,21 +69,31 @@ class Helpers:
 
     @staticmethod
     async def get_file_info(message: Message, bot: Bot) -> str | None:
+        """
+        Метод олределяет тип файла (видео, фото, голос, видео или документ).
+        Далее, получив file_id делает запрос к телеграму для получения пути.
+        И возвращает путь.
+        Например:
+            voice/file_20.oga
+            documents/file_21.pdf
+            photos/file_19.jpg
+        :return: путь до файла (photos/file_19.jpg). str
+        """
         file_id = None
         file_unique_id = None
 
         if message.voice:
-            file_id = message.voice[-1].file_id
-            file_unique_id = message.voice[-1].file_unique_id
+            file_id = message.voice.file_id
+            file_unique_id = message.voice.file_unique_id
         if message.photo:
             file_id = message.photo[-1].file_id
             file_unique_id = message.photo[-1].file_unique_id
         if message.video:
-            file_id = message.video[-1].file_id
-            file_unique_id = message.video[-1].file_unique_id
+            file_id = message.video.file_id
+            file_unique_id = message.video.file_unique_id
         if message.document:
-            file_id = message.document[-1].file_id
-            file_unique_id = message.document[-1].file_unique_id
+            file_id = message.document.file_id
+            file_unique_id = message.document.file_unique_id
 
         file = await bot.get_file(file_id)
         file_path = file.file_path

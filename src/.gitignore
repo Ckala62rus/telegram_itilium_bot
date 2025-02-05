@@ -4,4 +4,5 @@
 log.log
 error.log
 critical.log
-.env
+../.env
+files

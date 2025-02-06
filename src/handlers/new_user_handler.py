@@ -84,7 +84,11 @@ async def get_all_scs_types_handler_reply_markup(message: types.Message):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("crate_new_issue"))
-async def start_command(callback: types.CallbackQuery, state: FSMContext):
+async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Метод инициирует создание нового обращение с FSM состоянием.
+    (Обращение создается как с текстом, так и файлами, которые можно приложить к описанию)
+    """
     logger.debug("Perform callback command create_new_issue and get cancel button")
     await callback.answer()
     await callback.message.delete()
@@ -94,6 +98,53 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
     )
 
     await state.set_state(CreateNewIssue.description)
+
+
+@new_user_router.message(
+    StateFilter(CreateNewIssue.files),
+    F.text == str(UserButtonText.CREATE_ISSUE)
+)
+async def confirm_crate_new_issue_command(
+        message: types.Message,
+        state: FSMContext
+):
+    data = await state.get_data()
+
+    logger.debug(f"FSM State: {data}")
+    logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
+    user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
+
+    if user_data_from_itilium is None:
+        logger.debug("user not found in Itilium")
+        await state.clear()
+        await message.answer(
+            text="Не удалось найти вас в системе ITILIUM",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        return
+
+    # send date to itilium api for create issue
+    response: Response = await ItiliumBaseApi.create_new_sc({
+        "UUID": user_data_from_itilium["UUID"],
+        "Description": data["description"],
+        "shortDescription": Helpers.prepare_short_description_for_sc(data["description"]),
+    }, data["files"])
+
+    logger.debug(f"{response.status_code} | {response.text}")
+
+    if response.status_code == httpx.codes.OK:
+        await message.answer(
+            text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+    else:
+        logger.debug(f"{response.text}")
+        await message.answer(
+            text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+
+    await state.clear()
 
 
 @new_user_router.message(CreateNewIssue.description, F.text)

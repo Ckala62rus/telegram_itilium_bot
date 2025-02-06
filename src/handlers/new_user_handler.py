@@ -152,6 +152,9 @@ async def set_description_for_issue(
         message: types.Message,
         state: FSMContext
 ):
+    """
+    Метод позволяющий создать текст для нового обращения
+    """
     logger.debug("enter description for new issue")
 
     if len(message.text) == 0:
@@ -160,37 +163,81 @@ async def set_description_for_issue(
 
     await state.update_data(description=message.text)
 
-    logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
-    user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
+    await state.set_state(CreateNewIssue.files)
+    await state.update_data(files=[])
+    await message.answer(
+        text=f"Описание добавлено. При необходмости, можете добавьте файлы к обращению. "
+             f"Что бы подтвердить создание обращения, "
+             f"нажмите кнопку '{str(UserButtonText.CREATE_ISSUE)}'",
+        reply_markup=get_keyboard(
+            str(UserButtonText.CANCEL),
+            str(UserButtonText.CREATE_ISSUE))
+    )
 
-    if user_data_from_itilium is None:
-        logger.debug("user not found in Itilium")
-        await state.clear()
-        await message.answer(
-            text="Не удалось найти вас в системе ITILIUM",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
+    # logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
+    # user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
+    #
+    # if user_data_from_itilium is None:
+    #     logger.debug("user not found in Itilium")
+    #     await state.clear()
+    #     await message.answer(
+    #         text="Не удалось найти вас в системе ITILIUM",
+    #         reply_markup=types.ReplyKeyboardRemove()
+    #     )
+    #
+    # # send date to itilium api for create issue
+    # response: Response = await ItiliumBaseApi.create_new_sc({
+    #     "UUID": user_data_from_itilium["UUID"],
+    #     "Description": message.text,
+    #     "shortDescription": Helpers.prepare_short_description_for_sc(message.text),
+    # })
+    #
+    # logger.debug(f"{response.status_code} | {response.text}")
+    #
+    # if response.status_code == httpx.codes.OK:
+    #     await message.answer(
+    #         text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
+    #         reply_markup=types.ReplyKeyboardRemove()
+    #     )
+    # else:
+    #     logger.debug(f"{response.text}")
+    #     await message.answer(
+    #         text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
+    #         reply_markup=types.ReplyKeyboardRemove()
+    #     )
+    #
+    # await state.clear()
 
-    # send date to itilium api for create issue
-    response: Response = await ItiliumBaseApi.create_new_sc({
-        "UUID": user_data_from_itilium["UUID"],
-        "Description": message.text,
-        "shortDescription": Helpers.prepare_short_description_for_sc(message.text),
-    })
 
-    logger.debug(f"{response.status_code} | {response.text}")
+@new_user_router.message(CreateNewIssue.files)
+async def set_description_for_issue(
+        message: types.Message,
+        state: FSMContext,
+        bot: Bot
+):
+    """
+    Метод для добавления различных файлов к обращению
+    """
+    data = await state.get_data()
 
-    if response.status_code == httpx.codes.OK:
-        await message.answer(
-            text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
-    else:
-        logger.debug(f"{response.text}")
-        await message.answer(
-            text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
+    if (
+            message.photo or
+            message.video or
+            message.voice or
+            message.document
+    ) is not None:
+        file_path = await Helpers.get_file_info(message, bot)
+        files: list = data.get("files", [])
+
+        logger.debug(f"files: {files}")
+
+        if files is None:
+            await state.update_data(names=[])
+
+        # names.append({
+        #     "filename": file_path.split("/")[-1],  # file_13.jpg
+        #     "file": file_path  # photos/file_13.jpg
+        # })
 
     await state.clear()
 

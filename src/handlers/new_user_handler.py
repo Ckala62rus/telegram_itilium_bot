@@ -239,7 +239,10 @@ async def set_description_for_issue(
         #     "file": file_path  # photos/file_13.jpg
         # })
 
-    await state.clear()
+        files.append(file_path)
+
+        await message.answer("Файл подготовлен к отправке")
+        return
 
 
 @new_user_router.callback_query(F.data.startswith("accept$"))

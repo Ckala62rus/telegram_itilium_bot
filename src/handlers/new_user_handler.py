@@ -347,7 +347,7 @@ async def send_comment_for_sc_to_itilium(
 
 
 @new_user_router.message(StateFilter(CreateComment.files))
-@new_user_router.message(F.text)
+# @new_user_router.message(F.text)
 @new_user_router.message(F.photo)
 @new_user_router.message(F.video)
 @new_user_router.message(F.voice)
@@ -425,27 +425,27 @@ async def test_filter(
 #     await state.update_data(files=files)
 
 
-@new_user_router.message(CreateComment.comment, F.text)
-async def set_comment_for_sc(
-        message: types.Message,
-        state: FSMContext
-):
-    data = await state.get_data()
-
-    logger.debug(f"comment: {message.text}")
-    logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
-
-    response: Response = await ItiliumBaseApi.add_comment_to_sc(
-        telegram_user_id=message.from_user.id,
-        comment=message.text,
-        sc_number=data["sc_id"]
-    )
-
-    await state.clear()
-    await message.answer(
-        "Комментарий добавлен",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
+# @new_user_router.message(CreateComment.comment, F.text)
+# async def set_comment_for_sc(
+#         message: types.Message,
+#         state: FSMContext
+# ):
+#     data = await state.get_data()
+#
+#     logger.debug(f"comment: {message.text}")
+#     logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
+#
+#     response: Response = await ItiliumBaseApi.add_comment_to_sc(
+#         telegram_user_id=message.from_user.id,
+#         comment=message.text,
+#         sc_number=data["sc_id"]
+#     )
+#
+#     await state.clear()
+#     await message.answer(
+#         "Комментарий добавлен",
+#         reply_markup=types.ReplyKeyboardRemove()
+#     )
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("show_sc$"))
@@ -649,8 +649,8 @@ async def btn_all_callback(callback: types.CallbackQuery):
 
 @new_user_router.message(F.text)
 async def magic_filter(
-    message: types.Message,
-    state: FSMContext
+        message: types.Message,
+        state: FSMContext
 ):
     """
     Магический фильтр, который ловит все необработанные сообщения.

@@ -43,6 +43,10 @@ async def start_command(message: types.Message):
 async def cancel_fsm_handler(message: types.Message, state: FSMContext) -> None:
     current_state = await state.get_state()
     if current_state is None:
+        await message.answer(
+            "действия отменены",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
         return
     await state.clear()
     await message.answer(

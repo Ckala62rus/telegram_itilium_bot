@@ -310,6 +310,11 @@ async def send_comment_for_sc_to_itilium(
         message: types.Message,
         state: FSMContext
 ):
+    await message.answer(
+        text="идёт отправка комментария... ",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
     data: dict = await state.get_data()
 
     current_state = await state.get_state()
@@ -319,15 +324,19 @@ async def send_comment_for_sc_to_itilium(
     # logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
     logger.debug(f"files for comment: {data['files']}")
 
-    response: Response = await ItiliumBaseApi.add_comment_to_sc(
-        telegram_user_id=message.from_user.id,
-        # comment=message.text,
-        comment=data.get("comment", 'no comment'),
-        sc_number=data["sc_id"],
-        files=data["files"]
-    )
+    try:
+        response: Response = await ItiliumBaseApi.add_comment_to_sc(
+            telegram_user_id=message.from_user.id,
+            # comment=message.text,
+            comment=data.get("comment", 'no comment'),
+            sc_number=data["sc_id"],
+            files=data["files"]
+        )
 
-    logger.debug("send comment to 1C itilium")
+        logger.debug("send comment to 1C itilium")
+    except Exception as e:
+        await message.answer("Проблемы на стороне Итилиума. Обратитесь к администратору.")
+        logger.error(e)
 
     await state.clear()
     await message.answer(

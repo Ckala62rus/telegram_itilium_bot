@@ -66,5 +66,7 @@ def get_keyboard(
             keyboard.add(KeyboardButton(text=text))
 
     return keyboard.adjust(*sizes).as_markup(
-        resize_keyboard=True, input_field_placeholder=placeholder)
-
+        resize_keyboard=True,
+        input_field_placeholder=placeholder,
+        one_time_keyboard=False  # скрывать клавиатуру или нет
+    )

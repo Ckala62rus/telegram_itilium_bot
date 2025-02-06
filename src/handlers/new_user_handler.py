@@ -148,6 +148,7 @@ async def confirm_crate_new_issue_command(
 
 
 @new_user_router.message(CreateNewIssue.description, F.text)
+# @new_user_router.message(StateFilter(CreateNewIssue.description))
 async def set_description_for_issue(
         message: types.Message,
         state: FSMContext

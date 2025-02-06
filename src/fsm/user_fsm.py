@@ -3,6 +3,8 @@ from aiogram.fsm.state import StatesGroup, State
 
 class CreateNewIssue(StatesGroup):
     description = State()
+    files = State()
+    # ready_to_send = State()
 
     texts = {
         'AddProduct:description': 'Введите описание обращения:',

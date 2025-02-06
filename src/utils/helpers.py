@@ -51,8 +51,8 @@ class Helpers:
         # Статус заявки
         sc_attr["state"] += input_data["state"]
         # Ответственный специалист
-        if input_data["responsibleEmployeeTitle"] is not None:
-            sc_attr["responsibleEmployee"] += input_data["responsibleEmployeeTitle"]
+        if input_data["responsibleTeamTitle"] is not None:
+            sc_attr["responsibleEmployee"] += input_data["responsibleTeamTitle"]
         # Срок решения заявки
         if input_data["deadlineDate"] is not None:
             # date = datetime.strptime(input_data["timeAllowanceTimer"]["deadLineTime"].replace('.', '-'),

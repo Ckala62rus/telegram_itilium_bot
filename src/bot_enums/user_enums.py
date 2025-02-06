@@ -43,3 +43,4 @@ class UserButtonText(StrEnum):
     CANCEL = "отмена",
     ACTIONS_CANCELED = "Действия отменены"
     SEND_COMMENT = "Отправить комментарий"
+    CREATE_ISSUE = "Создать обращение"

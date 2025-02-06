@@ -54,7 +54,7 @@ class ItiliumBaseApi:
             return None
 
     @staticmethod
-    async def create_new_sc(data: dict) -> Response:
+    async def create_new_sc(data: dict, files: list) -> Response:
         """
         Метод для создания нового обращения
         :params data: словарь с данными
@@ -69,7 +69,15 @@ class ItiliumBaseApi:
             "Description": data['Description']
         }
 
-        return await ItiliumBaseApi.send_request("POST", ApiUrls.CREATE_SC, request_data)
+        url = ApiUrls.CREATE_SC
+
+        if len(files) > 0:
+            url_params = ";".join(files)
+            url += f"files={url_params}"
+
+        logger.debug(f"url: {url}")
+
+        return await ItiliumBaseApi.send_request("POST", url, request_data)
 
     @staticmethod
     async def send_request(method: str, url: str, data: dict | None) -> Response:
@@ -78,7 +86,7 @@ class ItiliumBaseApi:
         """
         try:
             async with httpx.AsyncClient() as client:
-                return httpx.request(
+                return await client.request(
                     method=method,
                     url=settings.ITILIUM_TEST_URL + url,
                     data=data,

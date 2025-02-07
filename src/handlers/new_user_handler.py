@@ -1,19 +1,16 @@
 import json
 import logging
-import pathlib
-from pathlib import Path
 
 import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from httpx import Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
 from filters.chat_types import ChatTypeFilter
-from fsm.user_fsm import CreateNewIssue, CreateComment, ListNames
+from fsm.user_fsm import CreateNewIssue, CreateComment
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD

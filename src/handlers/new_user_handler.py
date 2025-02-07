@@ -43,6 +43,10 @@ async def start_command(message: types.Message):
 async def cancel_fsm_handler(message: types.Message, state: FSMContext) -> None:
     current_state = await state.get_state()
     if current_state is None:
+        await message.answer(
+            "действия отменены",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
         return
     await state.clear()
     await message.answer(
@@ -80,7 +84,11 @@ async def get_all_scs_types_handler_reply_markup(message: types.Message):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("crate_new_issue"))
-async def start_command(callback: types.CallbackQuery, state: FSMContext):
+async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Метод инициирует создание нового обращение с FSM состоянием.
+    (Обращение создается как с текстом, так и файлами, которые можно приложить к описанию)
+    """
     logger.debug("Perform callback command create_new_issue and get cancel button")
     await callback.answer()
     await callback.message.delete()
@@ -92,19 +100,17 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(CreateNewIssue.description)
 
 
-@new_user_router.message(CreateNewIssue.description, F.text)
-async def set_description_for_issue(
+@new_user_router.message(
+    StateFilter(CreateNewIssue.files),
+    F.text == str(UserButtonText.CREATE_ISSUE)
+)
+async def confirm_crate_new_issue_command(
         message: types.Message,
         state: FSMContext
 ):
-    logger.debug("enter description for new issue")
+    data = await state.get_data()
 
-    if len(message.text) == 0:
-        await message.answer("Вы ввели пустое описание. Введите описание заного или отмените все действия")
-        return
-
-    await state.update_data(description=message.text)
-
+    logger.debug(f"FSM State: {data}")
     logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
     user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
 
@@ -115,13 +121,14 @@ async def set_description_for_issue(
             text="Не удалось найти вас в системе ITILIUM",
             reply_markup=types.ReplyKeyboardRemove()
         )
+        return
 
     # send date to itilium api for create issue
     response: Response = await ItiliumBaseApi.create_new_sc({
         "UUID": user_data_from_itilium["UUID"],
-        "Description": message.text,
-        "shortDescription": Helpers.prepare_short_description_for_sc(message.text),
-    })
+        "Description": data["description"],
+        "shortDescription": Helpers.prepare_short_description_for_sc(data["description"]),
+    }, data["files"])
 
     logger.debug(f"{response.status_code} | {response.text}")
 
@@ -138,6 +145,105 @@ async def set_description_for_issue(
         )
 
     await state.clear()
+
+
+@new_user_router.message(CreateNewIssue.description, F.text)
+# @new_user_router.message(StateFilter(CreateNewIssue.description))
+async def set_description_for_issue(
+        message: types.Message,
+        state: FSMContext
+):
+    """
+    Метод позволяющий создать текст для нового обращения
+    """
+    logger.debug("enter description for new issue")
+
+    if len(message.text) == 0:
+        await message.answer("Вы ввели пустое описание. Введите описание заного или отмените все действия")
+        return
+
+    await state.update_data(description=message.text)
+
+    await state.set_state(CreateNewIssue.files)
+    await state.update_data(files=[])
+    await message.answer(
+        text=f"Описание добавлено. При необходмости, можете добавьте файлы к обращению. "
+             f"Что бы подтвердить создание обращения, "
+             f"нажмите кнопку '{str(UserButtonText.CREATE_ISSUE)}'",
+        reply_markup=get_keyboard(
+            str(UserButtonText.CANCEL),
+            str(UserButtonText.CREATE_ISSUE))
+    )
+
+    # logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
+    # user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
+    #
+    # if user_data_from_itilium is None:
+    #     logger.debug("user not found in Itilium")
+    #     await state.clear()
+    #     await message.answer(
+    #         text="Не удалось найти вас в системе ITILIUM",
+    #         reply_markup=types.ReplyKeyboardRemove()
+    #     )
+    #
+    # # send date to itilium api for create issue
+    # response: Response = await ItiliumBaseApi.create_new_sc({
+    #     "UUID": user_data_from_itilium["UUID"],
+    #     "Description": message.text,
+    #     "shortDescription": Helpers.prepare_short_description_for_sc(message.text),
+    # })
+    #
+    # logger.debug(f"{response.status_code} | {response.text}")
+    #
+    # if response.status_code == httpx.codes.OK:
+    #     await message.answer(
+    #         text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
+    #         reply_markup=types.ReplyKeyboardRemove()
+    #     )
+    # else:
+    #     logger.debug(f"{response.text}")
+    #     await message.answer(
+    #         text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
+    #         reply_markup=types.ReplyKeyboardRemove()
+    #     )
+    #
+    # await state.clear()
+
+
+@new_user_router.message(CreateNewIssue.files)
+async def set_description_for_issue(
+        message: types.Message,
+        state: FSMContext,
+        bot: Bot
+):
+    """
+    Метод для добавления различных файлов к обращению
+    """
+    data = await state.get_data()
+
+    if (
+            message.photo or
+            message.video or
+            message.voice or
+            message.document
+    ) is not None:
+        file_path = await Helpers.get_file_info(message, bot)
+        files: list = data.get("files", [])
+
+        logger.debug(f"files: {files}")
+
+        if files is None:
+            await state.update_data(names=[])
+
+        # names.append({
+        #     "filename": file_path.split("/")[-1],  # file_13.jpg
+        #     "file": file_path  # photos/file_13.jpg
+        # })
+
+        files.append(file_path)
+
+        await message.answer("Файл подготовлен к отправке")
+        return
 
 
 @new_user_router.callback_query(F.data.startswith("accept$"))
@@ -205,6 +311,11 @@ async def send_comment_for_sc_to_itilium(
         message: types.Message,
         state: FSMContext
 ):
+    await message.answer(
+        text="идёт отправка комментария... ",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
     data: dict = await state.get_data()
 
     current_state = await state.get_state()
@@ -214,15 +325,19 @@ async def send_comment_for_sc_to_itilium(
     # logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
     logger.debug(f"files for comment: {data['files']}")
 
-    response: Response = await ItiliumBaseApi.add_comment_to_sc(
-        telegram_user_id=message.from_user.id,
-        # comment=message.text,
-        comment=data.get("comment", 'no comment'),
-        sc_number=data["sc_id"],
-        files=data["files"]
-    )
+    try:
+        response: Response = await ItiliumBaseApi.add_comment_to_sc(
+            telegram_user_id=message.from_user.id,
+            # comment=message.text,
+            comment=data.get("comment", 'no comment'),
+            sc_number=data["sc_id"],
+            files=data["files"]
+        )
 
-    logger.debug("send comment to 1C itilium")
+        logger.debug("send comment to 1C itilium")
+    except Exception as e:
+        await message.answer("Проблемы на стороне Итилиума. Обратитесь к администратору.")
+        logger.error(e)
 
     await state.clear()
     await message.answer(
@@ -232,7 +347,7 @@ async def send_comment_for_sc_to_itilium(
 
 
 @new_user_router.message(StateFilter(CreateComment.files))
-@new_user_router.message(F.text)
+# @new_user_router.message(F.text)
 @new_user_router.message(F.photo)
 @new_user_router.message(F.video)
 @new_user_router.message(F.voice)
@@ -310,27 +425,27 @@ async def test_filter(
 #     await state.update_data(files=files)
 
 
-@new_user_router.message(CreateComment.comment, F.text)
-async def set_comment_for_sc(
-        message: types.Message,
-        state: FSMContext
-):
-    data = await state.get_data()
-
-    logger.debug(f"comment: {message.text}")
-    logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
-
-    response: Response = await ItiliumBaseApi.add_comment_to_sc(
-        telegram_user_id=message.from_user.id,
-        comment=message.text,
-        sc_number=data["sc_id"]
-    )
-
-    await state.clear()
-    await message.answer(
-        "Комментарий добавлен",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
+# @new_user_router.message(CreateComment.comment, F.text)
+# async def set_comment_for_sc(
+#         message: types.Message,
+#         state: FSMContext
+# ):
+#     data = await state.get_data()
+#
+#     logger.debug(f"comment: {message.text}")
+#     logger.debug(f"{message.from_user.id} | {data["sc_id"]}")
+#
+#     response: Response = await ItiliumBaseApi.add_comment_to_sc(
+#         telegram_user_id=message.from_user.id,
+#         comment=message.text,
+#         sc_number=data["sc_id"]
+#     )
+#
+#     await state.clear()
+#     await message.answer(
+#         "Комментарий добавлен",
+#         reply_markup=types.ReplyKeyboardRemove()
+#     )
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("show_sc$"))
@@ -534,8 +649,8 @@ async def btn_all_callback(callback: types.CallbackQuery):
 
 @new_user_router.message(F.text)
 async def magic_filter(
-    message: types.Message,
-    state: FSMContext
+        message: types.Message,
+        state: FSMContext
 ):
     """
     Магический фильтр, который ловит все необработанные сообщения.

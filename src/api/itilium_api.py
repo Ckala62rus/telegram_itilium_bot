@@ -72,6 +72,7 @@ class ItiliumBaseApi:
         url = ApiUrls.CREATE_SC
 
         if len(files) > 0:
+            url += "?"
             url_params = ";".join(files)
             url += f"files={url_params}"
 

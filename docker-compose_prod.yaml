@@ -1,0 +1,10 @@
+services:
+  itilium_telegram_bot_back:
+    image: ckala62rus/backend_telegram_bot_itilium:latest
+    container_name: itilium_telegram_bot_back
+    command: bash -c "python app.py"
+#    ports:
+#      - "8001:8001"
+    volumes:
+      - ./src:/src
+      - ./.env:/src/.env

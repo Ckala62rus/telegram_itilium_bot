@@ -12,6 +12,12 @@ poetry export --without-hashes --format=requirements.txt > requirements.txt
 ### Delete all in docker
 docker system prune -af
 
+### download all packages for local install 
+pip download -d vendor -r requirements.txt
+
+### Install all packages localhost from folder
+pip install /opt/project/src/vendor/*.whl
+
 
 ###
 main url

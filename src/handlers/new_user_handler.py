@@ -127,25 +127,29 @@ async def confirm_crate_new_issue_command(
         return
 
     # send date to itilium api for create issue
-    response: Response = await ItiliumBaseApi.create_new_sc({
-        "UUID": user_data_from_itilium["UUID"],
-        "Description": data["description"],
-        "shortDescription": Helpers.prepare_short_description_for_sc(data["description"]),
-    }, data["files"])
+    try:
+        response: Response = await ItiliumBaseApi.create_new_sc({
+            "UUID": user_data_from_itilium["UUID"],
+            "Description": data["description"],
+            "shortDescription": Helpers.prepare_short_description_for_sc(data["description"]),
+        }, data["files"])
 
-    logger.debug(f"{response.status_code} | {response.text}")
+        logger.debug(f"{response.status_code} | {response.text}")
 
-    if response.status_code == httpx.codes.OK:
-        await message.answer(
-            text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
-    else:
-        logger.debug(f"{response.text}")
-        await message.answer(
-            text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
+        if response.status_code == httpx.codes.OK:
+            await message.answer(
+                text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+        else:
+            logger.debug(f"{response.text}")
+            await message.answer(
+                text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+    except Exception as e:
+        logger.exception(e)
+        await message.answer(f"Ошибка: {str(e)}")
 
     await state.clear()
 
@@ -443,6 +447,13 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("del_message"))
 async def show_sc_info_callback(callback: types.CallbackQuery):
     await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_client"))
+async def show_sc_info_callback(callback: types.CallbackQuery):
+    user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+    logger.debug(f"user: {user}")
+    await callback.answer("Callback get all my SC")
 
 
 @new_user_router.callback_query()

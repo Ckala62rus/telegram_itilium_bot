@@ -454,6 +454,9 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
     logger.debug(f"user: {user}")
     await callback.answer("Callback get all my SC")
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_sc_pagination"))
+async def delete_scs_list_pagination(callback: types.CallbackQuery):
+    await callback.message.delete()
 
 
 @new_user_router.callback_query()

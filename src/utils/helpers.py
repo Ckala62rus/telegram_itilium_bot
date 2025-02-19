@@ -1,8 +1,8 @@
 import logging
 
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import Bot
-
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -104,3 +104,31 @@ class Helpers:
         logger.debug(f"file_path | {file_path}")
 
         return file_path
+
+    @staticmethod
+    async def get_paginated_kb_scs(scs: list, page: int = 0) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        start_offset = page * 10
+        end_offset = start_offset + 10
+        count_page = len(scs)
+
+        for sc in scs[start_offset:end_offset]:
+            builder.row(InlineKeyboardButton(
+                text=sc["shortDescription"],
+                callback_data=f"show_sc${sc["number"]}"
+            ))
+
+        buttons_row = []
+
+        if page > 0:
+            buttons_row.append(InlineKeyboardButton(text="⬅️",callback_data=f"sc_page_{page - 1}",))
+
+        if page != count_page and end_offset < count_page:
+            buttons_row.append(InlineKeyboardButton(text="➡️",callback_data=f"sc_page_{page + 1}",))
+
+        builder.row(*buttons_row)
+
+        builder.row(InlineKeyboardButton(text="❌",callback_data=f"delete_sc_pagination",))
+
+        return builder.as_markup()

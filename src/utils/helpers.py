@@ -120,28 +120,15 @@ class Helpers:
             ))
 
         buttons_row = []
+
         if page > 0:
-            buttons_row.append(
-                InlineKeyboardButton(
-                    text="⬅️",
-                    callback_data=f"sc_page_{page - 1}",
-                )
-            )
+            buttons_row.append(InlineKeyboardButton(text="⬅️",callback_data=f"sc_page_{page - 1}",))
+
         if page != count_page and end_offset < count_page:
-            buttons_row.append(
-                InlineKeyboardButton(
-                    text="➡️",
-                    callback_data=f"sc_page_{page + 1}",
-                )
-            )
+            buttons_row.append(InlineKeyboardButton(text="➡️",callback_data=f"sc_page_{page + 1}",))
 
         builder.row(*buttons_row)
 
-        builder.row(
-            InlineKeyboardButton(
-                text="❌",
-                callback_data=f"delete_sc_pagination",
-            )
-        )
+        builder.row(InlineKeyboardButton(text="❌",callback_data=f"delete_sc_pagination",))
 
         return builder.as_markup()

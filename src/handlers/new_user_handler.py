@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+import time
 
 import httpx
 from aiogram import types, Router, F, Bot
@@ -454,6 +456,53 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
     logger.debug(f"user: {user}")
     await callback.answer("Callback get all my SC")
+    logger.debug(f"user: {user['servicecalls']}")
+
+    await callback.answer()
+    send_message_for_search = await callback.message.answer("Запрашиваю заявки, подождите...")
+
+    # Start execute time
+    start_time = time.time()
+
+    my_scs: list = user['servicecalls']
+
+    if not my_scs:
+        await callback.answer()
+        await send_message_for_search.delete()
+        await callback.message.answer("У вас нет созданных заявок заявок")
+        return
+
+    tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    logger.debug(f"execution time: {execution_time}")
+    # Stop execute time
+
+    scs: list = [sc for sc in results if sc is not None]
+
+    data_with_pagination = await Helpers.get_paginated_kb_scs(scs)
+
+    # builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
+    #
+    # for sc in scs:
+    #     builder.row(InlineKeyboardButton(
+    #         text=sc["shortDescription"],
+    #         callback_data=f"sc_{sc["number"]}"
+    #     ))
+    #
+    # logger.debug(f"scs: {scs}")
+
+    from aiogram.types import InlineKeyboardMarkup
+
+    await send_message_for_search.delete()
+    await callback.message.answer(
+        text="Ваши обращения",
+        reply_markup=data_with_pagination
+    )
+
+
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_sc_pagination"))
 async def delete_scs_list_pagination(callback: types.CallbackQuery):
     await callback.message.delete()

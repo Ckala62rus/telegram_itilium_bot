@@ -205,7 +205,17 @@ async def set_description_for_issue(
         logger.debug(f"files: {files}")
         if files is None:
             await state.update_data(names=[])
-        files.append(file_path)
+        # files.append(file_path)
+
+        if message.document is not None:
+            filename = message.document.file_name
+        else:
+            filename = file_path
+
+        files.append({
+            "path": file_path,
+            "filename": filename,
+        })
 
     logger.debug(f"create_new_sc -> FSM data : {data}")
     # files =

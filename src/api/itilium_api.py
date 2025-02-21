@@ -138,15 +138,17 @@ class ItiliumBaseApi:
 
                 logger.debug(f"response code: {resp.status_code} | response text: {resp.text}")
 
-        if response.status_code == httpx.codes.OK:
-            return response.json()
-
-        return None
                 if resp.status_code == httpx.codes.OK and len(resp.text) > 0:
+                    return resp.json()
         except Exception as e:
             logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
             logger.exception(e)
             return None
+
+    @staticmethod
+    async def get_task_for_async_find_sc_by_id(scs: list, callback: CallbackQuery):
+        tasks = [asyncio.create_task(ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc)) for sc in scs]
+        return await asyncio.gather(*tasks, return_exceptions=True)
 
     @staticmethod
     async def add_comment_to_sc(

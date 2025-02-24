@@ -41,11 +41,17 @@ class ItiliumBaseApi:
         :param attribute_code: Атрибут для 1С Итилиум (обязательный параметр)
         :return: возвращает json-объект типа employee$employee или null
         """
-        post_data = {attribute_code: message.from_user.id}
+        try:
+            post_data = {attribute_code: message.from_user.id}
 
-        response: Response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, post_data)
+            logger.debug(f"get_employee_data_by_identifier {ApiUrls.FIND_EMPLOYEE_URL}")
 
-        logger.debug(f"response code: {response.status_code} | response text: {response.text}")
+            response: Response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, post_data)
+
+            logger.debug(f"response code: {response.status_code} | response text: {response.text}")
+        except Exception as e:
+            logger.error(e)
+            return None
 
         if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:
             return json.loads(response.text)
@@ -89,6 +95,9 @@ class ItiliumBaseApi:
         """
         Базовый метод, обёртка над httpx
         """
+        logger.debug(f"send_request {method} {settings.ITILIUM_TEST_URL + url}")
+        logger.debug(f"send_request data {data}")
+
         try:
             async with httpx.AsyncClient() as client:
                 return await client.request(

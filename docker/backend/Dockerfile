@@ -5,6 +5,9 @@ WORKDIR /src
 COPY ./src/pyproject.toml \
     ./src/poetry.lock /src/
 
+COPY ./src .
+
+
 RUN apk --update add mc curl curl bash nano
 
 RUN pip install poetry && pip install poetry-plugin-export

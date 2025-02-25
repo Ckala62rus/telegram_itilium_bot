@@ -7,9 +7,11 @@ COPY ./src/pyproject.toml \
 
 RUN apk --update add mc curl curl bash nano
 
+RUN pip install poetry && pip install poetry-plugin-export
+
 RUN apk --update add \
-    && pip install poetry \
-    && pip install poetry-plugin-export \
+#    && pip install poetry \
+#    && pip install poetry-plugin-export \
     && curl -sSL https://install.python-poetry.org | python3 - \
     && pip install poetry \
     && poetry export --without-hashes -f requirements.txt --output requirements.txt \
@@ -18,6 +20,6 @@ RUN apk --update add \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /var/cache/apt
 
-ENV TZ = Europa/Moscow
+#ENV TZ = Europa/Moscow
 
-CMD ["timedatectl", "set-timezone", "Europe/Moscow"]
+#CMD ["timedatectl", "set-timezone", "Europe/Moscow"]

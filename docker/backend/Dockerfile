@@ -23,6 +23,6 @@ RUN apk --update add \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /var/cache/apt
 
-#ENV TZ = Europa/Moscow
+ENV TZ = Europa/Moscow
 
-#CMD ["timedatectl", "set-timezone", "Europe/Moscow"]
+CMD ["timedatectl", "set-timezone", "Europe/Moscow"]

@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import ssl
+
 import httpx
 from aiogram import types
 from aiogram.types import Message, CallbackQuery
@@ -47,6 +49,9 @@ class ItiliumBaseApi:
             logger.debug(f"get_employee_data_by_identifier {ApiUrls.FIND_EMPLOYEE_URL}")
 
             response: Response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, post_data)
+
+            if response.status_code == httpx.codes.FORBIDDEN:
+                await message.message.answer(f"Доступ запрещён.")
 
             logger.debug(f"response code: {response.status_code} | response text: {response.text}")
         except Exception as e:
@@ -138,7 +143,7 @@ class ItiliumBaseApi:
 
     @staticmethod
     async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response | None:
-        try:
+        # try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(settings.ITILIUM_TEST_URL + ApiUrls.FIND_SC.format(
                     telegram_user_id=telegram_user_id,
@@ -149,10 +154,10 @@ class ItiliumBaseApi:
 
                 if resp.status_code == httpx.codes.OK and len(resp.text) > 0:
                     return resp.json()
-        except Exception as e:
-            logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
-            logger.exception(e)
-            return None
+        # except Exception as e:
+        #     logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
+        #     logger.exception(e)
+        #     return None
 
     @staticmethod
     async def get_task_for_async_find_sc_by_id(scs: list, callback: CallbackQuery):

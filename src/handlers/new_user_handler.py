@@ -111,7 +111,8 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
 #     F.text == str(UserButtonText.CREATE_ISSUE)
 # )
 @new_user_router.message(
-    (StateFilter(CreateNewIssue.files) or StateFilter(CreateNewIssue.description)) and F.text == str(UserButtonText.CREATE_ISSUE)
+    (StateFilter(CreateNewIssue.files) or StateFilter(CreateNewIssue.description)) and F.text == str(
+        UserButtonText.CREATE_ISSUE)
 )
 async def confirm_crate_new_issue_command(
         message: types.Message,
@@ -332,14 +333,28 @@ async def btn_reply_for_comment(
     await callback.answer()
     await callback.message.answer(
         "Введите коментарий или добавьте картинку. Для отмены, нажмите кнопку 'Отмена'",
-        reply_markup=get_keyboard(
-            str(UserButtonText.CANCEL),
-            str(UserButtonText.SEND_COMMENT)
-        )
+        # reply_markup=get_keyboard(
+        #     str(UserButtonText.CANCEL),
+        #     str(UserButtonText.SEND_COMMENT)
+        # )
+        reply_markup=get_callback_btns(btns={
+            "отмена": "cancel"
+        })
     )
     await state.set_state(CreateComment.files)
     await state.update_data(sc_id=callback.data[6:])
     await state.update_data(files=[])
+
+
+@new_user_router.callback_query(StateFilter(CreateComment.files), F.data.startswith("cancel"))
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("cancel"))
+async def callback_cancel_btn(
+        callback: types.CallbackQuery,
+        state: FSMContext
+):
+    await state.clear()
+    await callback.answer()
+    await callback.message.delete()
 
 
 @new_user_router.message(F.text == str(UserButtonText.SEND_COMMENT))

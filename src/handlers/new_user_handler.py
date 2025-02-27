@@ -483,6 +483,12 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_client"))
 async def show_sc_info_callback(callback: types.CallbackQuery):
     user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+
+    if user is None:
+        await callback.answer()
+        await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
+        return
+
     logger.debug(f"user: {user['servicecalls']}")
 
     await callback.answer()
@@ -499,8 +505,11 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
         await callback.message.answer("У вас нет созданных заявок заявок")
         return
 
-    tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
+    # results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
+    results = asyncio.run(ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback))
 
     end_time = time.time()
     execution_time = end_time - start_time
@@ -510,18 +519,6 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     scs: list = [sc for sc in results if sc is not None]
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs)
-
-    # builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
-    #
-    # for sc in scs:
-    #     builder.row(InlineKeyboardButton(
-    #         text=sc["shortDescription"],
-    #         callback_data=f"sc_{sc["number"]}"
-    #     ))
-    #
-    # logger.debug(f"scs: {scs}")
-
-    from aiogram.types import InlineKeyboardMarkup
 
     await send_message_for_search.delete()
     await callback.message.answer(

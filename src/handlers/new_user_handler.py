@@ -56,12 +56,16 @@ async def cancel_fsm_handler(message: types.Message, state: FSMContext) -> None:
 
 @new_user_router.message(Command("menu"))
 @new_user_router.message(F.text == str(UserButtonText.MENU))
-async def get_all_scs_types_handler_reply_markup(message: types.Message):
+async def handler_menu_command(
+        message: types.Message,
+        state: FSMContext
+):
     """
     Метод, определяющий возможность выбора "типов" заявок, доступных пользователю. Список "типов" заявок
     выводится в зависимоти от типа пользователя (сотрудник IT/нет)
     """
 
+    await state.clear()
     logger.debug("command or message -> menu")
 
     # await message.delete()
@@ -72,10 +76,10 @@ async def get_all_scs_types_handler_reply_markup(message: types.Message):
 
     logger.debug("Отправляем inline кнопки меню")
     await message.answer("Выберите необходимый пункт меню:", reply_markup=USER_MENU_KEYBOARD)
-    await message.answer(
-        text=str(UserButtonText.CHOOSE_MENY),
-        # reply_markup=get_keyboard(str(UserButtonText.CANCEL))
-    )
+    # await message.answer(
+    #     text=str(UserButtonText.CHOOSE_MENY),
+    #     # reply_markup=get_keyboard(str(UserButtonText.CANCEL))
+    # )
 
     # сохраняем идентификатор собщения для послдующего удаления при зваершении сессии
     # current_bot_users.add_current_session_mes_id_to_list(message.from_user.id, message.message_id)

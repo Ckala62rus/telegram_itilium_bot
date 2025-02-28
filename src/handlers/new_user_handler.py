@@ -7,12 +7,14 @@ import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
 from filters.chat_types import ChatTypeFilter
-from fsm.user_fsm import CreateNewIssue, CreateComment
+from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
@@ -65,6 +67,7 @@ async def handler_menu_command(
     выводится в зависимоти от типа пользователя (сотрудник IT/нет)
     """
 
+    await message.delete()
     await state.clear()
     logger.debug("command or message -> menu")
 

@@ -17,3 +17,8 @@ class CreateComment(StatesGroup):
     comment = State()
     files = State()
     sc_id = State()
+
+
+class SearchSC(StatesGroup):
+    sc_number = State()
+    preview_message = State()

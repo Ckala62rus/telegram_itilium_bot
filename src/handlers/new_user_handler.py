@@ -448,11 +448,23 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     logger.debug(f"{callback.data}")
     sc_number = callback.data[8:]
     logger.info(f"{sc_number}")
-    response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+
+    try:
+        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+    except Exception as e:
+        logger.debug(f"error for {callback.from_user.id} {sc_number} {e}")
+        logger.exception(e)
+        await callback.answer()
+        # await callback.message.answer(f"{e}")
+        await callback.message.answer(f"При запросе в Итилиум про")
+        return None
+
     await callback.answer()
 
     if response is None:
         return await callback.message.answer(f"Заявка с номером {sc_number} не найдена")
+
+    logger.debug(f"find_sc_by_id | {response}")
 
     # Формируем текст сообщения
     message_text = Helpers.prepare_sc(response)
@@ -461,7 +473,7 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
         btn = get_callback_btns(
             btns={
                 "Скрыть информацию ↩️": "del_message",
-                "Взять в работу ️ 🛠": "to_work{0}".format(sc_number),
+                # "Взять в работу ️ 🛠": "to_work{0}".format(sc_number),
             }
         )
     else:

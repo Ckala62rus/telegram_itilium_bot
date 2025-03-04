@@ -496,7 +496,11 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_client"))
-async def show_sc_info_callback(callback: types.CallbackQuery):
+async def show_all_client_scs_callback(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки "Мои заявки".
+    Выводится весь список созданных мной заявок, с постраничной навигацией
+    """
     user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
 
     if user is None:
@@ -523,8 +527,8 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     # tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
     # results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
-    results = asyncio.run(ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback))
+    results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
+    # results = asyncio.run(ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback))
 
     end_time = time.time()
     execution_time = end_time - start_time
@@ -544,6 +548,9 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("sc_page_"))
 async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
+    """
+    Обработчик кнопок постраничной навигации в отображении списка, созданных мною заявок
+    """
     # Start execute time
     start_time = time.time()
 
@@ -577,6 +584,9 @@ async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_sc_pagination"))
 async def delete_scs_list_pagination(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки удаления списка, созданных мною заявок, с постраничной навигации
+    """
     await callback.message.delete()
 
 
@@ -585,7 +595,6 @@ async def btn_all_callback(callback: types.CallbackQuery):
     """
     Обработчик ловит любые Callback
     """
-    a = callback.data
     # show_sc$0000023773 при нажатии на кнопку "Открыть заявку"
     # reply$0000023773 при нажатии на кнопку "Добавить комментарий"
     logger.debug(f"unknown callback | {callback.from_user.id} | {callback.data}")

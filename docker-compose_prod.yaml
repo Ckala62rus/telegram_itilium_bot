@@ -1,10 +1,12 @@
 services:
   itilium_telegram_bot_back:
-    image: ckala62rus/backend_telegram_bot_itilium:latest
+    image: ckala62rus/backend_telegram_bot_itilium_prod:latest
     container_name: itilium_telegram_bot_back
+    build:
+      context: .
+      dockerfile: ./docker/backend_prod/Dockerfile
     command: bash -c "python app.py"
-#    ports:
-#      - "8001:8001"
+#    tty: true
     volumes:
-      - ./src:/src
+#      - ./src:/src
       - ./.env:/src/.env

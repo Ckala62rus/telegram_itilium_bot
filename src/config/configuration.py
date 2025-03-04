@@ -33,6 +33,16 @@ class Settings:
     ITILIUM_LOGIN: str = os.getenv("ITILIUM_LOGIN")
     ITILIUM_PASSWORD: str = os.getenv("ITILIUM_PASSWORD")
 
+    # Env Redis
+    REDIS_HOST: str = os.getenv("REDIS_HOST")
+    REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD")
+    REDIS_DATABASE: int = os.getenv("REDIS_DATABASE", 0)
+
+    # Redis
+    REDIS_TIMEOUT: int = 5
+
+
 
 # Декоратор lru_cache для хэширования конфига, что бы при следующих обращениях брался его кеш
 @lru_cache

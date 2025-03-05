@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 class Settings:
-
     # POSTGRES
     POSTGRES_USER: str = os.getenv('POSTGRES_USER')
     POSTGRES_PASSWORD: str = os.getenv('POSTGRES_PASSWORD')
@@ -41,7 +40,6 @@ class Settings:
 
     # Redis
     REDIS_TIMEOUT: int = 5
-
 
 
 # Декоратор lru_cache для хэширования конфига, что бы при следующих обращениях брался его кеш

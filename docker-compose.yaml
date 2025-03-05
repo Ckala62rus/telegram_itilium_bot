@@ -5,50 +5,18 @@ services:
     build:
       context: .
       dockerfile: ./docker/backend/Dockerfile
-    command: bash -c "alembic upgrade head && python app.py"
+    command: bash -c "python app.py"
     ports:
       - "8001:8001"
     volumes:
       - ./src:/src
       - ./.env:/src/.env
-    depends_on:
-      - db_telegram_bot_itilium
-#    networks:
-#      - my-proxy-net
-#      - default
 
-  db_telegram_bot_itilium:
-    container_name: db_telegram_bot_itilium
-    image: postgres:14.1-alpine
-#    restart: always
+  redis_itilium:
+    image: "redis:6.2.7"
+    container_name: redis_itilium
     ports:
-      - "5432:5432"
-    volumes:
-      - pgdata_telegram_bot_itilium:/var/lib/postgresql/data
-      - ./docker/backup/postgres:/tmp/backup
-    env_file:
-      - ./.env
-#    networks:
-#      - my-proxy-net
-#      - default
-
-  pgadmin_telegram_bot_itilium:
-    image: dpage/pgadmin4:6.15
-    container_name: pgadmin_telegram_bot_itilium
-    env_file:
-      - ./.env
-    ports:
-      - "5050:80"
-    volumes:
-      - ./docker/pgadmin:/var/lib/pgadmin
-    depends_on:
-      - db_telegram_bot_itilium
-
-volumes:
-  pgdata_telegram_bot_itilium:
-    name: pgdata_telegram_bot_itilium
-
-#networks:
-#  my-proxy-net:
-#    external:
-#      name: giveItANamePlease
+      - "6379:6379"
+    restart: no
+    environment:
+      - TZ=Europe/Moscow

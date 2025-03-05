@@ -9,33 +9,23 @@ from config.configuration import settings
 logger = logging.getLogger(__name__)
 
 
-# class RedisCli(Redis):
 class RedisCli:
     r: Redis = None
 
     def __init__(self):
         logger.info("Initializing Redis Cli")
-        logger.debug(f"settings.REDIS_HOST: {settings.REDIS_HOST}")
-
-        # super(RedisCli, self).__init__(
-        #     host=settings.REDIS_HOST,
-        #     port=settings.REDIS_PORT,
-        #     # password=settings.REDIS_PASSWORD,
-        #     db=settings.REDIS_DATABASE,
-        #     socket_timeout=settings.REDIS_TIMEOUT,
-        #     decode_responses=True,  # Кодировка utf-8
-        # )
+        logger.debug(f"settings.REDIS_HOST: {settings.REDIS_HOST} "
+                     f"| settings.REDIS_PORT: {settings.REDIS_PORT}")
 
         self.r = redis.Redis(
-            host="redis_itilium",
-            port=6379,
-            # password=123123,
-            db=0,
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            password=settings.REDIS_PASSWORD,
+            db=settings.REDIS_DATABASE,
             decode_responses=True,  # Результат сразу конвертируем в строку из байт
         )
 
-        res = self.r.ping()
-        print(123)
+        self.r.ping()
 
     async def open(self):
         """
@@ -82,10 +72,10 @@ def get_redis_db():
     Возвращаем экземпляр Redis, но проверяем, есть ли соединение с Redis
     """
     r = redis.Redis(
-        host="redis_itilium",
-        port=6379,
-        # password=123123,
-        db=0,
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD,
+        db=settings.REDIS_DATABASE,
         decode_responses=True,  # Результат сразу конвертируем в строку из байт
     )
 
@@ -105,5 +95,4 @@ def get_redis_db():
 
 
 # Создание redis экземпляра
-# redis_client = RedisCli()
 redis_client = get_redis_db()

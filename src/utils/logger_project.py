@@ -63,7 +63,9 @@ logging_config = {
         },
         'stdout': {
             'class': 'logging.StreamHandler',
-            'formatter': 'formatter_2',
+            # 'formatter': 'formatter_2',
+            'formatter': 'formatter_1',
+            'level': MAIN_LEVEL,
             # 'filters': ['debug_warning_filter'],
             'stream': sys.stdout
         },
@@ -102,16 +104,19 @@ logging_config = {
     'loggers': {
         'handlers': {
             'level': MAIN_LEVEL,
-            'handlers': ['error_file', ]
+            # 'handlers': ['error_file', ]
+            'handlers': ['stdout', ]
 
         },
         'db': {
             'level': MAIN_LEVEL,
-            'handlers': ['error_file', ]
+            # 'handlers': ['error_file', ]
+            'handlers': ['stdout', ]
         },
         'config': {
             'level': MAIN_LEVEL,
-            'handlers': ['error_file', ]
+            # 'handlers': ['error_file', ]
+            'handlers': ['stdout', ]
         },
         # 'module_2': {
         #     'handlers': ['stdout']
@@ -124,9 +129,9 @@ logging_config = {
         'formatter': 'default',
         'handlers': [
             'default',
-            'some_logs',
-            'critical_file',
-            'error_file',
+            # 'some_logs',
+            # 'critical_file',
+            # 'stdout',
         ],
         'level': MAIN_LEVEL
     }

@@ -349,10 +349,15 @@ async def btn_reply_for_comment(
 
 @new_user_router.callback_query(StateFilter(CreateComment.files), F.data.startswith("cancel"))
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("cancel"))
+@new_user_router.callback_query(StateFilter("*"), F.data.startswith("cancel"))
 async def callback_cancel_btn(
         callback: types.CallbackQuery,
         state: FSMContext
 ):
+    """
+    Обработчик кнопки "отмена".
+    Удаляется сообщение с кнопкой "отмена", так же очищается машина состояние FSM
+    """
     await state.clear()
     await callback.answer()
     await callback.message.delete()
@@ -363,6 +368,10 @@ async def send_comment_for_sc_to_itilium(
         message: types.Message,
         state: FSMContext
 ):
+    """
+    Обработчик кнопки "Отправить комментарий".
+    Так же происходит отправка файлов, приткрепленных к коментарию.
+    """
     await message.answer(
         text="идёт отправка комментария... ",
         reply_markup=types.ReplyKeyboardRemove()
@@ -408,6 +417,9 @@ async def test_filter(
         state: FSMContext,
         bot: Bot
 ):
+    """
+    Обработчик отвечающий за получение названий файлов и подготовку ссылок, через которые Итилиум их скачает.
+    """
     data = await state.get_data()
 
     if (
@@ -489,7 +501,10 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("del_message"))
-async def show_sc_info_callback(callback: types.CallbackQuery):
+async def hide_sc_info_callback(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки "Скрыть информацию"
+    """
     await callback.message.delete()
 
 

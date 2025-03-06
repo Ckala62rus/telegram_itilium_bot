@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import time
@@ -7,8 +6,6 @@ import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
@@ -19,6 +16,7 @@ from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
 from services.user_private_service import base_start_handler
+from utils.db_redis import redis_client
 from utils.helpers import Helpers
 
 new_user_router = Router()
@@ -97,7 +95,7 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
     """
     logger.debug("Perform callback command create_new_issue and get cancel button")
     await callback.answer()
-    await callback.message.delete()
+
     await callback.message.answer(
         text="Введите описание обращения",
         reply_markup=get_keyboard(str(UserButtonText.CANCEL))
@@ -351,10 +349,15 @@ async def btn_reply_for_comment(
 
 @new_user_router.callback_query(StateFilter(CreateComment.files), F.data.startswith("cancel"))
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("cancel"))
+@new_user_router.callback_query(StateFilter("*"), F.data.startswith("cancel"))
 async def callback_cancel_btn(
         callback: types.CallbackQuery,
         state: FSMContext
 ):
+    """
+    Обработчик кнопки "отмена".
+    Удаляется сообщение с кнопкой "отмена", так же очищается машина состояние FSM
+    """
     await state.clear()
     await callback.answer()
     await callback.message.delete()
@@ -365,6 +368,10 @@ async def send_comment_for_sc_to_itilium(
         message: types.Message,
         state: FSMContext
 ):
+    """
+    Обработчик кнопки "Отправить комментарий".
+    Так же происходит отправка файлов, приткрепленных к коментарию.
+    """
     await message.answer(
         text="идёт отправка комментария... ",
         reply_markup=types.ReplyKeyboardRemove()
@@ -410,6 +417,9 @@ async def test_filter(
         state: FSMContext,
         bot: Bot
 ):
+    """
+    Обработчик отвечающий за получение названий файлов и подготовку ссылок, через которые Итилиум их скачает.
+    """
     data = await state.get_data()
 
     if (
@@ -491,7 +501,10 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("del_message"))
-async def show_sc_info_callback(callback: types.CallbackQuery):
+async def hide_sc_info_callback(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки "Скрыть информацию"
+    """
     await callback.message.delete()
 
 

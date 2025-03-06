@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import time
@@ -7,8 +6,6 @@ import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
@@ -19,6 +16,7 @@ from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
 from services.user_private_service import base_start_handler
+from utils.db_redis import redis_client
 from utils.helpers import Helpers
 
 new_user_router = Router()
@@ -97,7 +95,7 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
     """
     logger.debug("Perform callback command create_new_issue and get cancel button")
     await callback.answer()
-    await callback.message.delete()
+
     await callback.message.answer(
         text="Введите описание обращения",
         reply_markup=get_keyboard(str(UserButtonText.CANCEL))

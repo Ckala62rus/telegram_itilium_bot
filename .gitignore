@@ -3,3 +3,4 @@
 docker/pgadmin
 #/src/vendor
 /docker.env
+/docker/prod/

@@ -501,7 +501,7 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_search"))
-async def show_sc_info_callback(
+async def search_sc_by_number_callback(
         callback: types.CallbackQuery,
         state: FSMContext,
 ):
@@ -519,6 +519,42 @@ async def show_sc_info_callback(
     )
     await state.update_data(preview_message=preview_message)
 
+
+@new_user_router.message(SearchSC.sc_number)
+async def handler_perform_search_for_sc_by_number(
+        message: types.Message,
+        state: FSMContext,
+):
+    """
+    Обработчик поиска заявки по номеру, после ввода номера пользователем.
+    """
+    looking_for = await message.answer("Ищу заявку с номером")
+    state_data = await state.get_data()
+    sc_number = message.text
+    logger.debug(f"find sc by number {sc_number}")
+    try:
+        result: dict | None = await ItiliumBaseApi.find_sc_by_id(message.from_user.id, sc_number)
+        logger.debug(f"find sc by number. response {sc_number}")
+    except Exception as e:
+        logger.debug(f"error for {message.from_user.id} {sc_number} {e}")
+        await state.clear()
+        await message.answer(f"Ошибка при поиске заявки {e}")
+        await looking_for.delete()
+        return
+
+    await message.answer(
+        text=Helpers.prepare_sc(result),
+        parse_mode='HTML',
+        reply_markup=get_callback_btns(
+            btns={
+                "Скрыть информацию ↩️": "del_message",
+            }
+        )
+    )
+    await state.clear()
+    await message.delete()
+    await looking_for.delete()
+    await state_data["preview_message"].delete()
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("del_message"))

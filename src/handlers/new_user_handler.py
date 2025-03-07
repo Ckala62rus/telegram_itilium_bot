@@ -500,6 +500,27 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     )
 
 
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_search"))
+async def show_sc_info_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    """
+    Обработчик для логики поиска заявки по номеру
+    """
+    await callback.answer()
+    await state.set_state(SearchSC.sc_number)
+    preview_message = await callback.message.answer(
+        text="Введите номер заявки для поиска или нажмите кнопку 'отмена'",
+        reply_markup=get_callback_btns(btns={
+            # "отмена": "cancel"
+            "отмена ❌": "cancel"
+        })
+    )
+    await state.update_data(preview_message=preview_message)
+
+
+
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("del_message"))
 async def hide_sc_info_callback(callback: types.CallbackQuery):
     """

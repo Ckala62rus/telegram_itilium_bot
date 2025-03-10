@@ -571,45 +571,64 @@ async def show_all_client_scs_callback(callback: types.CallbackQuery):
     Обработчик кнопки "Мои заявки".
     Выводится весь список созданных мной заявок, с постраничной навигацией
     """
-    user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+    r = redis_client
+    user_id = callback.from_user.id
+    scs = None
+    send_message_for_search = None
 
-    if user is None:
+    if not r.exists(user_id):
+        logger.debug(f"key with name {callback.from_user.id} is not exist in Redis!")
+
+        user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+
+        if user is None:
+            await callback.answer()
+            await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
+            return
+
+        logger.debug(f"user: {user['servicecalls']}")
+
         await callback.answer()
-        await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
-        return
+        send_message_for_search = await callback.message.answer("Запрашиваю заявки, подождите...")
 
-    logger.debug(f"user: {user['servicecalls']}")
+        # Start execute time
+        start_time = time.time()
 
-    await callback.answer()
-    send_message_for_search = await callback.message.answer("Запрашиваю заявки, подождите...")
+        my_scs: list = user['servicecalls']
 
-    # Start execute time
-    start_time = time.time()
+        if not my_scs:
+            await callback.answer()
+            await send_message_for_search.delete()
+            await callback.message.answer("У вас нет созданных заявок заявок")
+            return
 
-    my_scs: list = user['servicecalls']
+        results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
 
-    if not my_scs:
-        await callback.answer()
-        await send_message_for_search.delete()
-        await callback.message.answer("У вас нет созданных заявок заявок")
-        return
+        # кешируем результат
+        # Добавление элемента в начало списка
+        for sc in results:
+            r.rpush(user_id, json.dumps(sc))
 
-    # tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
-    # results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Указываем срок хранения для списка в 60 секунды
+        r.expire(user_id, 60)
 
-    results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
-    # results = asyncio.run(ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback))
+        end_time = time.time()
+        execution_time = end_time - start_time
+        logger.debug(f"execution time: {execution_time}")
+        # Stop execute time
 
-    end_time = time.time()
-    execution_time = end_time - start_time
-    logger.debug(f"execution time: {execution_time}")
-    # Stop execute time
+        # scs: list = [sc for sc in results if sc is not None]
 
-    scs: list = [sc for sc in results if sc is not None]
+        # извлекаем из редиса
+        scs = r.lrange(user_id, 0, -1)
+    else:
+        scs = r.lrange(user_id, 0, -1)
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs)
 
-    await send_message_for_search.delete()
+    if send_message_for_search:
+        await send_message_for_search.delete()
+
     await callback.message.answer(
         text="Ваши обращения",
         reply_markup=data_with_pagination

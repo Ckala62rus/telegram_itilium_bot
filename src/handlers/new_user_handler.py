@@ -644,22 +644,79 @@ async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
     start_time = time.time()
 
     page = callback.data.split("sc_page_")[1]
-    user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
-    my_scs: list = user['servicecalls']
 
-    tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+    # my_scs: list = user['servicecalls']
+    #
+    # tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
+    # results = await asyncio.gather(*tasks, return_exceptions=True)
+    #
+    # end_time = time.time()
+    # execution_time = end_time - start_time
+    # logger.debug(f"execution time: {execution_time}")
+    # # Stop execute time
+    #
+    # scs: list = [sc for sc in results if sc is not None]
+    #
+    # data_with_pagination = await Helpers.get_paginated_kb_scs(scs, int(page))
 
-    end_time = time.time()
-    execution_time = end_time - start_time
-    logger.debug(f"execution time: {execution_time}")
-    # Stop execute time
+    r = redis_client
+    user_id = callback.from_user.id
+    scs = None
+    send_message_for_search = None
 
-    scs: list = [sc for sc in results if sc is not None]
+    if not r.exists(user_id):
+        logger.debug(f"key with name {callback.from_user.id} is not exist in Redis!")
 
-    # data_with_pagination = await Helpers.get_paginated_kb_scs(scs)
+        user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+
+        if user is None:
+            await callback.answer()
+            await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
+            return
+
+        logger.debug(f"user: {user['servicecalls']}")
+
+        await callback.answer()
+        send_message_for_search = await callback.message.answer("Запрашиваю заявки, подождите...")
+
+        # Start execute time
+        start_time = time.time()
+
+        my_scs: list = user['servicecalls']
+
+        if not my_scs:
+            await callback.answer()
+            await send_message_for_search.delete()
+            await callback.message.answer("У вас нет созданных заявок заявок")
+            return
+
+        results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
+
+        # кешируем результат
+        # Добавление элемента в начало списка
+        for sc in results:
+            r.rpush(user_id, json.dumps(sc))
+
+        # Указываем срок хранения для списка 'mylist' в 4 секунды
+        r.expire(user_id, 60)
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        logger.debug(f"execution time: {execution_time}")
+        # Stop execute time
+
+        # scs: list = [sc for sc in results if sc is not None]
+
+        # извлекаем из редиса
+        scs = r.lrange(user_id, 0, -1)
+    else:
+        scs = r.lrange(user_id, 0, -1)
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs, int(page))
+
+    if send_message_for_search:
+        await send_message_for_search.delete()
 
     await callback.message.edit_reply_markup(
         reply_markup=data_with_pagination

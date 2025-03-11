@@ -10,6 +10,7 @@ from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
+from dto.paginate_scs_dto import PaginateScsDTO
 from filters.chat_types import ChatTypeFilter
 from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC
 from kbds.inline import get_callback_btns
@@ -542,15 +543,19 @@ async def handler_perform_search_for_sc_by_number(
         await looking_for.delete()
         return
 
-    await message.answer(
-        text=Helpers.prepare_sc(result),
-        parse_mode='HTML',
-        reply_markup=get_callback_btns(
-            btns={
-                "Скрыть информацию ↩️": "del_message",
-            }
+    if isinstance(result, str):
+        await message.answer(f"Поиск заявки {sc_number}. {result}")
+    else:
+        await message.answer(
+            text=Helpers.prepare_sc(result),
+            parse_mode='HTML',
+            reply_markup=get_callback_btns(
+                btns={
+                    "Скрыть информацию ↩️": "del_message",
+                }
+            )
         )
-    )
+
     await state.clear()
     await message.delete()
     await looking_for.delete()
@@ -576,14 +581,19 @@ async def show_all_client_scs_callback(callback: types.CallbackQuery):
     scs = None
     send_message_for_search = None
 
+    paginate_dto: PaginateScsDTO = PaginateScsDTO(
+        redis=r,
+        user_id=user_id,
+        # scs=scs,
+        # send_message_for_search=send_message_for_search,
+    )
+
     if not r.exists(user_id):
-        logger.debug(f"key with name {callback.from_user.id} is not exist in Redis!")
+        logger.debug(f"key with name {user_id} is not exist in Redis!")
 
         user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
 
         if user is None:
-            await callback.answer()
-            await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
             return
 
         logger.debug(f"user: {user['servicecalls']}")
@@ -604,13 +614,14 @@ async def show_all_client_scs_callback(callback: types.CallbackQuery):
 
         results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
 
+        paginate_dto.set_cache_scs(results)
         # кешируем результат
         # Добавление элемента в начало списка
-        for sc in results:
-            r.rpush(user_id, json.dumps(sc))
+        # for sc in results:
+        #     r.rpush(user_id, json.dumps(sc))
 
         # Указываем срок хранения для списка в 60 секунды
-        r.expire(user_id, 60)
+        # r.expire(user_id, 60)
 
         end_time = time.time()
         execution_time = end_time - start_time
@@ -621,8 +632,10 @@ async def show_all_client_scs_callback(callback: types.CallbackQuery):
 
         # извлекаем из редиса
         scs = r.lrange(user_id, 0, -1)
+        scs = paginate_dto.get_cache_scs()
     else:
-        scs = r.lrange(user_id, 0, -1)
+        # scs = r.lrange(user_id, 0, -1)
+        scs = paginate_dto.get_cache_scs()
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs)
 
@@ -645,25 +658,15 @@ async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
 
     page = callback.data.split("sc_page_")[1]
 
-    # user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
-    # my_scs: list = user['servicecalls']
-    #
-    # tasks = [ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc) for sc in my_scs]
-    # results = await asyncio.gather(*tasks, return_exceptions=True)
-    #
-    # end_time = time.time()
-    # execution_time = end_time - start_time
-    # logger.debug(f"execution time: {execution_time}")
-    # # Stop execute time
-    #
-    # scs: list = [sc for sc in results if sc is not None]
-    #
-    # data_with_pagination = await Helpers.get_paginated_kb_scs(scs, int(page))
-
     r = redis_client
     user_id = callback.from_user.id
     scs = None
     send_message_for_search = None
+
+    paginate_dto: PaginateScsDTO = PaginateScsDTO(
+        redis=r,
+        user_id=user_id,
+    )
 
     if not r.exists(user_id):
         logger.debug(f"key with name {callback.from_user.id} is not exist in Redis!")
@@ -671,8 +674,8 @@ async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
         user = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
 
         if user is None:
-            await callback.answer()
-            await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
+            # await callback.answer()
+            # await callback.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
             return
 
         logger.debug(f"user: {user['servicecalls']}")
@@ -693,25 +696,19 @@ async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
 
         results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
 
-        # кешируем результат
-        # Добавление элемента в начало списка
-        for sc in results:
-            r.rpush(user_id, json.dumps(sc))
-
-        # Указываем срок хранения для списка 'mylist' в 4 секунды
-        r.expire(user_id, 60)
+        paginate_dto.set_cache_scs(results)
 
         end_time = time.time()
         execution_time = end_time - start_time
         logger.debug(f"execution time: {execution_time}")
         # Stop execute time
 
-        # scs: list = [sc for sc in results if sc is not None]
-
         # извлекаем из редиса
-        scs = r.lrange(user_id, 0, -1)
+        # scs = r.lrange(user_id, 0, -1)
+        scs = paginate_dto.get_cache_scs()
     else:
-        scs = r.lrange(user_id, 0, -1)
+        # scs = r.lrange(user_id, 0, -1)
+        scs = paginate_dto.get_cache_scs()
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs, int(page))
 
@@ -721,11 +718,6 @@ async def show_sc_info_pagination_callback(callback: types.CallbackQuery):
     await callback.message.edit_reply_markup(
         reply_markup=data_with_pagination
     )
-
-    # await callback.message.answer(
-    #     text="Ваши обращения",
-    #     reply_markup=data_with_pagination
-    # )
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_sc_pagination"))

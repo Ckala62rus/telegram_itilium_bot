@@ -56,6 +56,8 @@ class ItiliumBaseApi:
             logger.debug(f"response code: {response.status_code} | response text: {response.text}")
         except Exception as e:
             logger.error(e)
+            await message.answer()
+            await message.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
             return None
 
         if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:

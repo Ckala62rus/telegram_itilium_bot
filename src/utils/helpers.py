@@ -1,3 +1,4 @@
+import json
 import logging
 
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -55,9 +56,6 @@ class Helpers:
             sc_attr["responsibleEmployee"] += input_data["responsibleTeamTitle"]
         # Срок решения заявки
         if input_data["deadlineDate"] is not None:
-            # date = datetime.strptime(input_data["timeAllowanceTimer"]["deadLineTime"].replace('.', '-'),
-            #                          "%Y-%m-%d %H:%M:%S") + timedelta(hours=3)
-            # date.strftime("%d.%m.%Y %H:%M")
             sc_attr["deadlineDate"] += input_data["deadlineDate"]
         # Описание заявки
         sc_attr["description"] += input_data["description"]
@@ -113,9 +111,10 @@ class Helpers:
         end_offset = start_offset + 10
         count_page = len(scs)
 
-        for sc in scs[start_offset:end_offset]:
+        for elem in scs[start_offset:end_offset]:
+            sc = json.loads(elem)
             builder.row(InlineKeyboardButton(
-                text=sc["shortDescription"],
+                text=f"({sc["number"]}) {sc["shortDescription"]}",
                 callback_data=f"show_sc${sc["number"]}"
             ))
 

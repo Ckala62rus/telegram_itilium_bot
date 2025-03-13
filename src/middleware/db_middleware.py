@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import (
     Callable,
     Dict,
@@ -67,3 +68,22 @@ class SaveInputCommandMiddleware(BaseMiddleware):
                     await session.commit()
 
         return await handler(event, data)
+
+
+class ExecuteTimeHandlerMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        # Start execute time
+        start_time = time.time()
+
+        result = await handler(event, data)
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        logger.info(f"execution time: {execution_time}")
+        # Stop execute time
+        return result

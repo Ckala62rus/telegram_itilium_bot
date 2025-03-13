@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 from middleware.db_middleware import (
     DatabaseSessionMiddleware,
     SaveInputCommandMiddleware,
+    ExecuteTimeHandlerMiddleware,
 )
 
 # default file name for find '.env'
@@ -57,6 +58,7 @@ async def main():
     logger.debug('init middlewares')
     # dp.update.middleware(DatabaseSessionMiddleware(session_pool=db))
     # dp.update.middleware(SaveInputCommandMiddleware())
+    dp.update.middleware(ExecuteTimeHandlerMiddleware())
     logger.debug('end init middlewares')
     # async with session_factory() as session_pool:
     #     logger.debug('check database connection')

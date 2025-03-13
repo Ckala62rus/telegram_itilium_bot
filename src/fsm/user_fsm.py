@@ -22,3 +22,7 @@ class CreateComment(StatesGroup):
 class SearchSC(StatesGroup):
     sc_number = State()
     preview_message = State()
+
+
+class LoadPagination(StatesGroup):
+    load = State()

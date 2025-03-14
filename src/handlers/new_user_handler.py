@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 
 import httpx
@@ -573,8 +574,8 @@ async def hide_sc_info_callback(callback: types.CallbackQuery):
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_client"))
 @new_user_router.callback_query(StateFilter(LoadPagination.load), F.data.startswith("scs_client"))
 async def show_all_client_scs_callback(
-    callback: types.CallbackQuery,
-    state: FSMContext,
+        callback: types.CallbackQuery,
+        state: FSMContext,
 ):
     """
     Обработчик кнопки "Мои заявки".
@@ -627,8 +628,8 @@ async def show_all_client_scs_callback(
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("sc_page_"))
 @new_user_router.callback_query(StateFilter(LoadPagination.load), F.data.startswith("sc_page_"))
 async def show_sc_info_pagination_callback(
-    callback: types.CallbackQuery,
-    state: FSMContext,
+        callback: types.CallbackQuery,
+        state: FSMContext,
 ):
     """
     Обработчик кнопок постраничной навигации в отображении списка, созданных мною заявок
@@ -683,6 +684,33 @@ async def delete_scs_list_pagination(callback: types.CallbackQuery):
     Обработчик кнопки удаления списка, созданных мною заявок, с постраничной навигации
     """
     await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("sc$"))
+async def confirm_sc_handler(callback: types.CallbackQuery):
+    """
+    При закрытии заявки, в чат прилетает общение о том, что ножно оставить сообщение.
+    Обработчик обрабатывает оценку от 0 до 5
+    """
+    await callback.answer()
+
+    # ^sc\$([0-9]{10})&mark\$([0-9]{1}).*$
+    # sc$0000023770&mark$0
+    try:
+        m = re.search('^sc\\$([0-9]{10})&mark\\$([0-9]{1}).*$', callback.data)
+        sc_number = m.group(1)
+        mark = m.group(2)
+        logger.debug(f"callback {callback.data} | sc_number {sc_number} | mark {mark}")
+        response = await ItiliumBaseApi.confirm_sc(
+            telegram_user_id=callback.from_user.id,
+            sc_number=sc_number,
+            mark=mark,
+        )
+        logger.debug(f"confirm_sc response {response.status_code} | {response.text}")
+        if response.status_code == 200:
+            await callback.message.edit_reply_markup(callback.id, reply_markup=None)
+    except Exception as e:
+        logger.error(f"error: {e}")
 
 
 @new_user_router.callback_query()

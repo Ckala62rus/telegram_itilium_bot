@@ -98,7 +98,12 @@ class ItiliumBaseApi:
         return await ItiliumBaseApi.send_request("POST", url, request_data)
 
     @staticmethod
-    async def send_request(method: str, url: str, data: dict | None) -> Response:
+    async def send_request(
+        method: str,
+        url: str,
+        data: dict | None,
+        params=None
+    ) -> Response:
         """
         Базовый метод, обёртка над httpx
         """
@@ -112,7 +117,8 @@ class ItiliumBaseApi:
                     url=settings.ITILIUM_TEST_URL + url,
                     data=data,
                     auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD),
-                    timeout=30.0
+                    timeout=30.0,
+                    params=params
                 )
         except Exception as e:
             logger.debug(f"error for {method} {url} {data}")
@@ -133,7 +139,7 @@ class ItiliumBaseApi:
         :state: "accept" or "reject"
         """
         response = await (ItiliumBaseApi
-                      .send_request("POST", ApiUrls.ACCEPT_OR_REJECT.format(
+                          .send_request("POST", ApiUrls.ACCEPT_OR_REJECT.format(
             telegram_user_id=callback.from_user.id,
             vote_number=callback.data[7:],
             state=state
@@ -146,20 +152,21 @@ class ItiliumBaseApi:
     @staticmethod
     async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response | None:
         # try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(settings.ITILIUM_TEST_URL + ApiUrls.FIND_SC.format(
-                    telegram_user_id=telegram_user_id,
-                    sc_number=sc_number
-                ), auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD), timeout=30.0)
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(settings.ITILIUM_TEST_URL + ApiUrls.FIND_SC.format(
+                telegram_user_id=telegram_user_id,
+                sc_number=sc_number
+            ), auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD), timeout=30.0)
 
-                logger.debug(f"response code: {resp.status_code} | response text: {resp.text}")
+            logger.debug(f"response code: {resp.status_code} | response text: {resp.text}")
 
-                if resp.status_code == httpx.codes.OK and len(resp.text) > 0:
-                    return resp.json()
-        # except Exception as e:
-        #     logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
-        #     logger.exception(e)
-        #     return None
+            if resp.status_code == httpx.codes.OK and len(resp.text) > 0:
+                return resp.json()
+
+    # except Exception as e:
+    #     logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
+    #     logger.exception(e)
+    #     return None
 
     @staticmethod
     async def get_task_for_async_find_sc_by_id(scs: list, callback: CallbackQuery):
@@ -168,18 +175,18 @@ class ItiliumBaseApi:
 
     @staticmethod
     async def add_comment_to_sc(
-        telegram_user_id: int,
-        comment: str,
-        sc_number: str,
-        files: list
+            telegram_user_id: int,
+            comment: str,
+            sc_number: str,
+            files: list
     ) -> Response:
         logger.info(f"added new comment sc {sc_number} | telegram_user_id: {telegram_user_id} | comment: {comment}")
 
         url = ApiUrls.ADD_COMMENT_TO_SC.format(
-                telegram_user_id=telegram_user_id,
-                source=sc_number,
-                comment_text=comment
-            )
+            telegram_user_id=telegram_user_id,
+            source=sc_number,
+            comment_text=comment
+        )
 
         logger.debug(f"url: {url}")
         logger.debug(f"comment: {comment}")
@@ -201,3 +208,19 @@ class ItiliumBaseApi:
             url,
             data
         ))
+
+    @staticmethod
+    async def confirm_sc(
+            telegram_user_id: int,
+            sc_number: str,
+            mark: str
+    ) -> Response:
+        return await (ItiliumBaseApi
+            .send_request(
+                "POST",
+                ApiUrls.CONFIRM_SC.format(
+                    telegram_user_id=telegram_user_id,
+                    incident=sc_number,
+                    mark=mark,
+                ), None
+            ))

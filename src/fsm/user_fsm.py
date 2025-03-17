@@ -1,6 +1,15 @@
 from aiogram.fsm.state import StatesGroup, State
 
 
+__all__ = [
+    'ConfirmSc',
+    'LoadPagination',
+    'CreateNewIssue',
+    'CreateComment',
+    'SearchSC',
+]
+
+
 class CreateNewIssue(StatesGroup):
     description = State()
     files = State()
@@ -26,3 +35,11 @@ class SearchSC(StatesGroup):
 
 class LoadPagination(StatesGroup):
     load = State()
+
+
+class ConfirmSc(StatesGroup):
+    grade = State()
+    sc_number = State()
+    comment = State()
+    message_with_choice_grade = State()
+    messages_ids = State()

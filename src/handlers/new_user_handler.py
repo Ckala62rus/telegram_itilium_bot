@@ -728,6 +728,56 @@ async def confirm_sc_handler(
         logger.error(f"error: {e}")
 
 
+@new_user_router.callback_query(StateFilter(ConfirmSc.grade), F.data.startswith("send_confirm_sc"))
+@new_user_router.callback_query(StateFilter(ConfirmSc.comment), F.data.startswith("send_confirm_sc"))
+async def set_comment_for_confirm_sc_handler(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    data: dict = await state.get_data()
+    grade = int(data["grade"])
+    comment = data.get("comment", None)
+    message_ids: list = data.get("messages_ids", [])
+    await callback.answer()
+
+    logger.debug(data)
+
+    if grade in [0, 1, 2] and comment is None:
+        await callback.message.delete()
+        # await callback.message.answer(f"С оценкой ({grade}), комментарий обязателен!")
+        message = await callback.message.answer(
+            text=f"С оценкой ({grade}), комментарий обязателен!. \n"
+                 f"Введите коментарий или отмените действия",
+            reply_markup=get_callback_btns(
+                btns={
+                    "отмена ❌": "cancel",
+                    "отправить оценку 📩": "send_confirm_sc",
+                }
+            )
+        )
+
+        message_ids.append(message.message_id)
+        await state.update_data(messages_ids=message_ids)
+
+        await state.set_state(ConfirmSc.comment)
+        return
+
+    if message_ids:
+        await callback.message.bot.delete_messages(
+            chat_id=callback.message.chat.id,
+            message_ids=message_ids
+        )
+
+    if comment is not None:
+        logger.debug(f"Ваш комментарий: {comment}")
+
+    await callback.message.delete()
+    await callback.message.answer(text=f"Ваша оценка ({data["grade"]}) отправлена!")
+    await state.clear()
+
+
+
+
 @new_user_router.callback_query()
 async def btn_all_callback(callback: types.CallbackQuery):
     """

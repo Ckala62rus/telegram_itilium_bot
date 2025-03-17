@@ -13,7 +13,7 @@ from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
 from dto.paginate_scs_dto import PaginateScsDTO
 from filters.chat_types import ChatTypeFilter
-from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination
+from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
@@ -687,7 +687,10 @@ async def delete_scs_list_pagination(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("sc$"))
-async def confirm_sc_handler(callback: types.CallbackQuery):
+async def confirm_sc_handler(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
     """
     При закрытии заявки, в чат прилетает общение о том, что ножно оставить сообщение.
     Обработчик обрабатывает оценку от 0 до 5
@@ -701,14 +704,26 @@ async def confirm_sc_handler(callback: types.CallbackQuery):
         sc_number = m.group(1)
         mark = m.group(2)
         logger.debug(f"callback {callback.data} | sc_number {sc_number} | mark {mark}")
-        response = await ItiliumBaseApi.confirm_sc(
-            telegram_user_id=callback.from_user.id,
-            sc_number=sc_number,
-            mark=mark,
+        # response = await ItiliumBaseApi.confirm_sc(
+        #     telegram_user_id=callback.from_user.id,
+        #     sc_number=sc_number,
+        #     mark=mark,
+        # )
+        # logger.debug(f"confirm_sc response {response.status_code} | {response.text}")
+        # if response.status_code == 200:
+        #     await callback.message.edit_reply_markup(callback.id, reply_markup=None)
+        await state.set_state(ConfirmSc.grade)
+        await state.update_data(grade=mark, sc_number=sc_number)
+        await callback.message.answer(
+            text=f"Ваша оценка: {mark}.",
+            reply_markup=get_callback_btns(
+                btns={
+                    "отмена ❌": "cancel",
+                    "добавить комментарий 📃": "add_confirm_sc_comment",
+                    "отправить оценку 📩": "send_confirm_sc",
+                }
+            )
         )
-        logger.debug(f"confirm_sc response {response.status_code} | {response.text}")
-        if response.status_code == 200:
-            await callback.message.edit_reply_markup(callback.id, reply_markup=None)
     except Exception as e:
         logger.error(f"error: {e}")
 

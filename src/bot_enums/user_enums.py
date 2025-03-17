@@ -44,3 +44,12 @@ class UserButtonText(StrEnum):
     ACTIONS_CANCELED = "Действия отменены"
     SEND_COMMENT = "Отправить комментарий"
     CREATE_ISSUE = "Создать обращение"
+
+
+class GradeConfirmSc(StrEnum):
+    EXCELLENT = '5'  # Отлично
+    GOOD = '4'  # Хорошо
+    SATISFIED = '3'  # Удовлетворительно
+    BAD = '2'  # Плохо
+    TERRIBLE = '1'  # Ужасно
+    UNSOLVED = '0'  # Обращение не решено

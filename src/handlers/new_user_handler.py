@@ -730,7 +730,7 @@ async def confirm_sc_handler(
 
 @new_user_router.callback_query(StateFilter(ConfirmSc.grade), F.data.startswith("send_confirm_sc"))
 @new_user_router.callback_query(StateFilter(ConfirmSc.comment), F.data.startswith("send_confirm_sc"))
-async def set_comment_for_confirm_sc_handler(
+async def set_grade_for_confirm_sc_handler(
         callback: types.CallbackQuery,
         state: FSMContext,
 ):
@@ -776,6 +776,34 @@ async def set_comment_for_confirm_sc_handler(
     await state.clear()
 
 
+@new_user_router.message(StateFilter(ConfirmSc.comment))
+async def set_comment_for_confirm_sc_handler(
+        message: types.Message,
+        state: FSMContext,
+):
+    data: dict = await state.get_data()
+    message_ids: list | None = data.get("messages_ids", None)
+    message_ids.append(message.message_id)
+    await state.update_data(messages_ids=message_ids)
+
+    comment = message.text
+    message = await message.answer(
+        text=f"Ваш комментарий {comment}",
+        reply_markup=get_callback_btns(
+            btns={
+                "отмена ❌": "cancel",
+                "отправить оценку 📩": "send_confirm_sc",
+            }
+        )
+    )
+
+    # await state.update_data(message_ids=message.append(message.message_id))
+    await state.update_data(comment=comment)
+
+    data: dict = await state.get_data()
+    logger.debug(data)
+    # проверяем если оценка 3,4,5, коментарий не обязателен и выводим кнопку отправить или добавить комментарий
+    # проверяем если оценка 0,1,2, то комментарий обязателен
 
 
 @new_user_router.callback_query()

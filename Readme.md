@@ -60,3 +60,7 @@ docker image tag ckala62rus/backend_telegram_bot_itilium_prod:latest ckala62rus/
 ```bash
 docker image push ckala62rus/backend_telegram_bot_itilium_prod:1.0.0
 ```
+docker image tag ckala62rus/backend_telegram_bot_itilium:latest ckala62rus/backend_telegram_bot_itilium_prod:4.0.0
+docker image push ckala62rus/backend_telegram_bot_itilium_prod:4.0.0
+sudo docker compose pull
+sudo docker up -d

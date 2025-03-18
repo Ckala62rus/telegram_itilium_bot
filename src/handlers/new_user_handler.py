@@ -713,7 +713,7 @@ async def confirm_sc_handler(
         # if response.status_code == 200:
         #     await callback.message.edit_reply_markup(callback.id, reply_markup=None)
         await state.set_state(ConfirmSc.grade)
-        await state.update_data(grade=mark, sc_number=sc_number)
+        await state.update_data(grade=mark, sc_number=sc_number, message_with_choice_grade=callback.message)
         await callback.message.answer(
             text=f"Ваша оценка: {mark}.",
             reply_markup=get_callback_btns(
@@ -738,6 +738,9 @@ async def set_grade_for_confirm_sc_handler(
     grade = int(data["grade"])
     comment = data.get("comment", None)
     message_ids: list = data.get("messages_ids", [])
+    # message_with_choice_grade: list = data.get("message_with_choice_grade")
+    message_with_choice_grade: types.Message = data.get("message_with_choice_grade")
+
     await callback.answer()
 
     logger.debug(data)
@@ -751,6 +754,7 @@ async def set_grade_for_confirm_sc_handler(
             reply_markup=get_callback_btns(
                 btns={
                     "отмена ❌": "cancel",
+                    "добавить комментарий 📃": "add_confirm_sc_comment",
                     "отправить оценку 📩": "send_confirm_sc",
                 }
             )
@@ -768,12 +772,50 @@ async def set_grade_for_confirm_sc_handler(
             message_ids=message_ids
         )
 
-    if comment is not None:
-        logger.debug(f"Ваш комментарий: {comment}")
+    # if comment is not None:
+    #     logger.debug(f"Ваш комментарий: {comment}")
 
-    await callback.message.delete()
-    await callback.message.answer(text=f"Ваша оценка ({data["grade"]}) отправлена!")
+    response: Response = await ItiliumBaseApi.confirm_sc(
+        telegram_user_id=callback.from_user.id,
+        sc_number=data["sc_number"],
+        mark=data["grade"],
+        comment=data["comment"] if comment else None
+    )
+
+    if response and response.status_code == httpx.codes.OK:
+        await callback.message.edit_reply_markup(str(message_with_choice_grade), reply_markup=None)
+        await message_with_choice_grade.edit_reply_markup(str(message_with_choice_grade), reply_markup=None)
+
+        await callback.message.delete()
+        await callback.message.answer(text=f"Ваша оценка ({data["grade"]}) отправлена!")
     await state.clear()
+
+
+@new_user_router.callback_query(StateFilter(ConfirmSc.grade), F.data.startswith("add_confirm_sc_comment"))
+@new_user_router.callback_query(StateFilter(ConfirmSc.comment), F.data.startswith("add_confirm_sc_comment"))
+async def set_comment_for_confirm_sc_handler(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    logger.debug("Оставляем комментарий")
+    await callback.answer()
+    # await callback.message.delete()
+
+    new_message = await callback.message.answer(
+        text=f"Введите комментарий или нажмите кнопку отмена",
+        reply_markup=get_callback_btns(
+            btns={
+                "отмена ❌": "cancel",
+            }
+        )
+    )
+
+    data: dict = await state.get_data()
+    message_ids: list = data.get("messages_ids", [])
+    message_ids.append(new_message.message_id)
+
+    await state.update_data(messages_ids=message_ids)
+    await state.set_state(ConfirmSc.comment)
 
 
 @new_user_router.message(StateFilter(ConfirmSc.comment))
@@ -788,7 +830,7 @@ async def set_comment_for_confirm_sc_handler(
 
     comment = message.text
     message = await message.answer(
-        text=f"Ваш комментарий {comment}",
+        text=f"Ваш комментарий: {comment}",
         reply_markup=get_callback_btns(
             btns={
                 "отмена ❌": "cancel",

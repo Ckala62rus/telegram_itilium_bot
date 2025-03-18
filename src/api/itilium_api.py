@@ -99,10 +99,10 @@ class ItiliumBaseApi:
 
     @staticmethod
     async def send_request(
-        method: str,
-        url: str,
-        data: dict | None,
-        params=None
+            method: str,
+            url: str,
+            data: dict | None,
+            params=None
     ) -> Response:
         """
         Базовый метод, обёртка над httpx
@@ -213,14 +213,21 @@ class ItiliumBaseApi:
     async def confirm_sc(
             telegram_user_id: int,
             sc_number: str,
-            mark: str
+            mark: str,
+            comment: str | None
     ) -> Response:
-        return await (ItiliumBaseApi
-            .send_request(
-                "POST",
-                ApiUrls.CONFIRM_SC.format(
-                    telegram_user_id=telegram_user_id,
-                    incident=sc_number,
-                    mark=mark,
-                ), None
-            ))
+        """
+        Метод отправляет оценку пользователя, от 0 до 5 для оценки решённой задачи.
+        Комментарий, является опциональным
+        """
+
+        url = ApiUrls.CONFIRM_SC.format(
+            telegram_user_id=telegram_user_id,
+            incident=sc_number,
+            mark=mark,
+        )
+
+        if comment:
+            url += f"&comment_text={comment}"
+
+        return await (ItiliumBaseApi.send_request("POST", url, None))

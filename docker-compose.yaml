@@ -15,6 +15,7 @@ services:
   redis_itilium:
     image: "redis:6.2.7"
     container_name: redis_itilium
+    command: bash -c "redis-server --requirepass 123123"
     ports:
       - "6379:6379"
     restart: no

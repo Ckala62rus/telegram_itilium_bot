@@ -449,7 +449,14 @@ async def test_filter(
         # return
 
     await state.update_data(comment=message.text)
-    await message.answer("Комментарий подготовлен к отправке")
+
+    await message.answer(
+        text="Комментарий подготовлен к отправке",
+        reply_markup=get_keyboard(
+            str(UserButtonText.CANCEL),
+            str(UserButtonText.SEND_COMMENT)
+        )
+    )
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("show_sc$"))

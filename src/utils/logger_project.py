@@ -1,6 +1,6 @@
 import logging.config
+from logging.handlers import RotatingFileHandler
 import sys
-
 
 MAIN_LEVEL = logging.DEBUG
 
@@ -46,7 +46,7 @@ logging_config = {
             '()': CriticalLogFilter,  # custom filter
         },
         'error_filter': {
-            '()': ErrorLogFilter, # custom filter
+            '()': ErrorLogFilter,  # custom filter
         },
         # 'debug_warning_filter': {
         #     '()': DebugWarningLogFilter, # custom filter
@@ -92,16 +92,20 @@ logging_config = {
             'formatter': 'default',
             # 'filters': ['error_filter']
         },
-        'rotating_to_file': {
-            'level': MAIN_LEVEL,
-            'class': "logging.handlers.RotatingFileHandler",
-            'formatter': 'default',
-            "filename": "log.log",
-            "maxBytes": 10,
-            "backupCount": 10,
-        },
+        # 'rotating': {
+        #     'level': 'DEBUG',
+        #     'class': "logging.handlers.RotatingFileHandler",
+        #     'formatter': 'default',
+        #     "filename": "app.log",
+        #     "maxBytes": 1000,
+        #     "backupCount": 10,
+        # },
     },
     'loggers': {
+        # '': {
+        #     'level': MAIN_LEVEL,
+        #     'handlers': ['stdout', 'rotating']
+        # },
         'handlers': {
             'level': MAIN_LEVEL,
             # 'handlers': ['error_file', ]
@@ -132,6 +136,7 @@ logging_config = {
             # 'some_logs',
             # 'critical_file',
             # 'stdout',
+            # 'rotating',
         ],
         'level': MAIN_LEVEL
     }

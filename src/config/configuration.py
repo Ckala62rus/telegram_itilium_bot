@@ -28,7 +28,7 @@ class Settings:
     BOT_TOKEN: str = os.getenv('TOKEN')
 
     # ITILIUM
-    ITILIUM_TEST_URL: str = os.getenv("ITILIUM_TEST_URL")
+    ITILIUM_URL: str = os.getenv("ITILIUM_URL")
     ITILIUM_LOGIN: str = os.getenv("ITILIUM_LOGIN")
     ITILIUM_PASSWORD: str = os.getenv("ITILIUM_PASSWORD")
 

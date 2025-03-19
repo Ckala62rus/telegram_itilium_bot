@@ -107,14 +107,14 @@ class ItiliumBaseApi:
         """
         Базовый метод, обёртка над httpx
         """
-        logger.debug(f"send_request {method} {settings.ITILIUM_TEST_URL + url}")
+        logger.debug(f"send_request {method} {settings.ITILIUM_URL + url}")
         logger.debug(f"send_request data {data}")
 
         try:
             async with httpx.AsyncClient() as client:
                 return await client.request(
                     method=method,
-                    url=settings.ITILIUM_TEST_URL + url,
+                    url=settings.ITILIUM_URL + url,
                     data=data,
                     auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD),
                     timeout=30.0,
@@ -153,7 +153,7 @@ class ItiliumBaseApi:
     async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response | None:
         # try:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(settings.ITILIUM_TEST_URL + ApiUrls.FIND_SC.format(
+            resp = await client.post(settings.ITILIUM_URL + ApiUrls.FIND_SC.format(
                 telegram_user_id=telegram_user_id,
                 sc_number=sc_number
             ), auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD), timeout=30.0)

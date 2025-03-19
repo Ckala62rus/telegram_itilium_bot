@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-print(settings.SQLALCHEMY_DATABASE_URL)
+# print(settings.SQLALCHEMY_DATABASE_URL)
 async_engine = create_async_engine(
     url=settings.SQLALCHEMY_DATABASE_URL,
     # url="postgresql+psycopg://postgres:postgres@db_telegram_bot:5432/alch",

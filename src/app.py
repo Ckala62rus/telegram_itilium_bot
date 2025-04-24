@@ -1,17 +1,12 @@
 import asyncio
 import logging.config
-import sys
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommandScopeAllPrivateChats
-from sqlalchemy import text
 
 from config.configuration import settings
-from database.db import session_factory
 from common.bot_cmds_list import private
-from database.session_db_manager import db_session
-from handlers.user_private import user_private_router
-from handlers.admin_private import admin_router
+from handlers.group_handler import user_group_router
 from handlers.new_user_handler import new_user_router
 # from apscheduler.schedulers.asyncio import AsyncIOScheduler
 # from sheduler import scheduler_tasks
@@ -24,22 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 from middleware.db_middleware import (
-    DatabaseSessionMiddleware,
-    SaveInputCommandMiddleware,
     ExecuteTimeHandlerMiddleware,
 )
-
-# default file name for find '.env'
-# load_dotenv(find_dotenv())
 
 bot = Bot(token=settings.BOT_TOKEN)
 bot.my_admins_list = []
 dp = Dispatcher()
 
 logger.debug('init routers')
+dp.include_router(user_group_router)
 dp.include_router(new_user_router)
-# dp.include_router(user_private_router)
-# dp.include_router(admin_router)
 logger.debug('success init routers')
 
 ALLOWED_UPDATES = ['message', 'edited_message', 'callback_query']
@@ -52,23 +41,9 @@ async def main():
     # scheduler.add_job(scheduler_tasks.every_minutes, trigger='interval', seconds=60, kwargs={'bot': bot})
     # scheduler.start()
 
-    # init database session via middleware
-    # db = db_session.session_factory()
-
     logger.debug('init middlewares')
-    # dp.update.middleware(DatabaseSessionMiddleware(session_pool=db))
-    # dp.update.middleware(SaveInputCommandMiddleware())
     dp.update.middleware(ExecuteTimeHandlerMiddleware())
     logger.debug('end init middlewares')
-    # async with session_factory() as session_pool:
-    #     logger.debug('check database connection')
-    #     try:
-    #         await session_pool.execute(text("SELECT 1"))  # check database connection
-    #         logger.debug('database connection success')
-    #     except Exception as e:
-    #         logger.exception(e)
-    #         logger.error('❌ Error to connect database')
-    #         sys.exit()
 
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.delete_my_commands(scope=BotCommandScopeAllPrivateChats())
@@ -77,7 +52,6 @@ async def main():
         scope=BotCommandScopeAllPrivateChats()
     )
     logger.debug('start polling')
-    # await dp.start_polling(bot, allowed_updates=ALLOWED_UPDATES)
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     except KeyboardInterrupt as k:

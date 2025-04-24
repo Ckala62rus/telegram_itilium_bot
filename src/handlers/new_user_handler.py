@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-import time
 
 import httpx
 from aiogram import types, Router, F, Bot
@@ -11,6 +10,7 @@ from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
+from config.configuration import settings
 from dto.paginate_scs_dto import PaginateScsDTO
 from filters.chat_types import ChatTypeFilter
 from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc
@@ -853,6 +853,18 @@ async def set_comment_for_confirm_sc_handler(
     logger.debug(data)
     # проверяем если оценка 3,4,5, коментарий не обязателен и выводим кнопку отправить или добавить комментарий
     # проверяем если оценка 0,1,2, то комментарий обязателен
+
+
+@new_user_router.callback_query(F.data.startswith("responsibility_scs_client"))
+async def set_comment_for_confirm_sc_handler(
+        callback: types.CallbackQuery,
+        bot: Bot
+):
+    await callback.answer()
+    await bot.send_message(
+        chat_id=settings.BARS_GROUP_TELEGRAM_ID,
+        text="test message for group"
+    )
 
 
 @new_user_router.callback_query()

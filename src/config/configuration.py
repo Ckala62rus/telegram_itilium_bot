@@ -41,6 +41,9 @@ class Settings:
     # Redis
     REDIS_TIMEOUT: int = 5
 
+    # Telegram organizations ids
+    BARS_GROUP_TELEGRAM_ID: int = os.getenv("BARS_GROUP_TELEGRAM_ID")
+
 
 # Декоратор lru_cache для хэширования конфига, что бы при следующих обращениях брался его кеш
 @lru_cache

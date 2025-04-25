@@ -37,6 +37,10 @@ class LoadPagination(StatesGroup):
     load = State()
 
 
+class LoadPaginationResponsible(StatesGroup):
+    load = State()
+
+
 class ConfirmSc(StatesGroup):
     grade = State()
     sc_number = State()

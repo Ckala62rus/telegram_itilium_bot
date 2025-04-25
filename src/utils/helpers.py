@@ -131,3 +131,9 @@ class Helpers:
         builder.row(InlineKeyboardButton(text="❌",callback_data=f"delete_sc_pagination",))
 
         return builder.as_markup()
+
+    @staticmethod
+    def delete_html_tags_from_text(text: str) -> str:
+        s = MLStripper()
+        s.feed(text)
+        return s.get_data()

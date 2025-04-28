@@ -79,7 +79,7 @@ class Helpers:
         if input_data["deadlineDate"] is not None:
             sc_attr["deadlineDate"] += input_data["deadlineDate"]
         # Описание заявки
-        sc_attr["description"] += input_data["description"]
+        sc_attr["description"] += re.sub(re.compile('<.*?>'), '', input_data["description"])
         # форимируем окончательно текст отправляемого сообщения
         output_data = ''
         for key in sc_attr:

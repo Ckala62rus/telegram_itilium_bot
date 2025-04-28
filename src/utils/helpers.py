@@ -1,11 +1,32 @@
 import json
 import logging
+import re
 
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import Bot
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from io import StringIO
+from html.parser import HTMLParser
 
 logger = logging.getLogger(__name__)
+
+
+class MLStripper(HTMLParser):
+    """
+    Delete html tags from text
+    """
+    def __init__(self):
+        super().__init__()
+        self.reset()
+        self.strict = False
+        self.convert_charrefs = True
+        self.text = StringIO()
+
+    def handle_data(self, d: str) -> str:
+        self.text.write(d)
+
+    def get_data(self):
+        return self.text.getvalue()
 
 
 class Helpers:
@@ -129,6 +150,35 @@ class Helpers:
         builder.row(*buttons_row)
 
         builder.row(InlineKeyboardButton(text="❌",callback_data=f"delete_sc_pagination",))
+
+        return builder.as_markup()
+
+    @staticmethod
+    async def get_paginated_kb_responsible_scs(scs: list, page: int = 0) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        start_offset = page * 2
+        end_offset = start_offset + 2
+        count_page = len(scs)
+
+        for elem in scs[start_offset:end_offset]:
+            sc = json.loads(elem)
+            builder.row(InlineKeyboardButton(
+                text=f"({sc["number"]}) {sc["shortDescription"]}",
+                callback_data=f"show_sc${sc["number"]}"
+            ))
+
+        buttons_row = []
+
+        if page > 0:
+            buttons_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"responsible_sc_page_{page - 1}", ))
+
+        if page != count_page and end_offset < count_page:
+            buttons_row.append(InlineKeyboardButton(text="➡️", callback_data=f"responsible_sc_page_{page + 1}", ))
+
+        builder.row(*buttons_row)
+
+        builder.row(InlineKeyboardButton(text="❌", callback_data=f"delete_responsible_sc_pagination", ))
 
         return builder.as_markup()
 

@@ -230,4 +230,12 @@ class ItiliumBaseApi:
         if comment:
             url += f"&comment_text={comment}"
 
+        return await (ItiliumBaseApi.send_request("GET", url, None))
+
+    @staticmethod
+    async def scs_responsibility_tasks(telegram_user_id: int) -> Response:
+        url = ApiUrls.SCS_RESPONSIBLE.format(
+            telegram_user_id=telegram_user_id,
+        )
+
         return await (ItiliumBaseApi.send_request("POST", url, None))

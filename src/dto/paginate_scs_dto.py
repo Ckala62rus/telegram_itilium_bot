@@ -1,6 +1,5 @@
 import json
 
-from aiogram.methods import SendMessage
 from redis import Redis
 
 

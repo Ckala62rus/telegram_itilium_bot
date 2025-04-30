@@ -12,12 +12,13 @@ from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
 from config.configuration import settings
 from dto.paginate_scs_dto import PaginateScsDTO
+from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
 from filters.chat_types import ChatTypeFilter
-from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc
+from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc, LoadPaginationResponsible
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
-from services.user_private_service import base_start_handler, paginate_scs_logic
+from services.user_private_service import base_start_handler, paginate_scs_logic, paginate_responsible_scs_logic
 from utils.db_redis import redis_client
 from utils.helpers import Helpers
 
@@ -683,6 +684,53 @@ async def show_sc_info_pagination_callback(
     await callback.message.edit_reply_markup(
         reply_markup=data_with_pagination
     )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("responsibility_scs_client"))
+@new_user_router.callback_query(StateFilter(LoadPaginationResponsible.load), F.data.startswith("responsibility_scs_client"))
+async def show_responsibility_scs_client(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+):
+    r = redis_client
+    user_id = callback.from_user.id
+    scs = None
+    send_message_for_search = None
+
+    state_data = await state.get_data()
+    is_loading = state_data.get("load", None)
+    await callback.answer()
+
+    paginate_dto: PaginateResponsibleScsDTO = PaginateResponsibleScsDTO(
+        redis=r,
+        user_id=user_id,
+    )
+
+    if is_loading:
+        return
+
+    if not r.exists(f"responsible:{str(user_id)}"):
+        result: dict = await paginate_responsible_scs_logic(callback, paginate_dto)
+
+        send_message_for_search = result.get("send_message_for_search", None)
+
+        # извлекаем из редиса
+        scs = paginate_dto.get_cache_responsible_scs()
+    else:
+        scs = paginate_dto.get_cache_responsible_scs()
+
+    data_with_pagination = await Helpers.get_paginated_kb_responsible_scs(scs)
+
+    if send_message_for_search:
+        await send_message_for_search.delete()
+
+    await state.clear()
+
+    await callback.message.answer(
+        text="Обращения в вашей ответственности",
+        reply_markup=data_with_pagination
+    )
+
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_sc_pagination"))

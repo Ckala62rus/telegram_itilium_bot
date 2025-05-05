@@ -489,23 +489,34 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     # Формируем текст сообщения
     message_text = Helpers.prepare_sc(response)
 
+    btns: dict = {}
+
     if response["state"] != 'registered':
-        btn = get_callback_btns(
-            btns={
-                "Скрыть информацию ↩️": "del_message",
-                # "Взять в работу ️ 🛠": "to_work{0}".format(sc_number),
-            }
-        )
+        # btn = get_callback_btns(
+        #     btns={
+        #         "Скрыть информацию ↩️": "del_message",
+        #         # "Взять в работу ️ 🛠": "to_work{0}".format(sc_number),
+        #     }
+        # )
+        btns["Скрыть информацию ↩️"] = "del_message"
     else:
-        btn = get_callback_btns(
-            btns={
-                "Скрыть информацию ↩️": "del_message",
-            }
-        )
+        # btn = get_callback_btns(
+        #     btns={
+        #         "Скрыть информацию ↩️": "del_message",
+        #     }
+        # )
+        btns["Скрыть информацию ↩️"] = "del_message"
+
+    if response["new_state"]:
+        btns["Поменять статус 🔁"] = f"show_state${sc_number}"
+        # for state in response["new_state"]:
+        #     btns[f"{state} ✏"] = f"change_{sc_number}_state_{state}"
+
+    btn_keyboard = get_callback_btns(btns=btns, size=(1,))
 
     await callback.message.answer(
         text=message_text,
-        reply_markup=btn,
+        reply_markup=btn_keyboard,
         parse_mode='HTML'
     )
 

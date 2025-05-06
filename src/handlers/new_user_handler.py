@@ -743,6 +743,58 @@ async def show_responsibility_scs_client(
     )
 
 
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("responsible_sc_page_"))
+@new_user_router.callback_query(StateFilter(LoadPaginationResponsible.load), F.data.startswith("responsible_sc_page_"))
+async def show_sc_info_pagination_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    """
+    Обработчик кнопок постраничной навигации в отображении списка, созданных мною заявок
+    """
+    r = redis_client
+    user_id = callback.from_user.id
+    scs = None
+    send_message_for_search = None
+
+    paginate_dto: PaginateResponsibleScsDTO = PaginateResponsibleScsDTO(
+        redis=r,
+        user_id=user_id,
+    )
+
+    state_data = await state.get_data()
+    is_loading = state_data.get("load", None)
+    await callback.answer()
+
+    if is_loading:
+        return
+
+    if not r.exists(f"responsible:{str(user_id)}"):
+        # Защищаем от повторного запроса
+        await state.set_state(LoadPagination.load)
+        await state.update_data(load=True)
+
+        logger.debug(f"key with name {callback.from_user.id} is not exist in Redis!")
+        result: dict = await paginate_responsible_scs_logic(callback, paginate_dto)
+        send_message_for_search = result.get("send_message_for_search", None)
+
+        # извлекаем из редиса
+        scs = paginate_dto.get_cache_responsible_scs()
+        await state.clear()
+    else:
+        scs = paginate_dto.get_cache_responsible_scs()
+
+    data_with_pagination = await Helpers.get_paginated_kb_responsible_scs(scs, int(callback.data.split("responsible_sc_page_")[1]))
+
+    if send_message_for_search:
+        await send_message_for_search.delete()
+
+    await state.clear()
+
+    await callback.message.edit_reply_markup(
+        reply_markup=data_with_pagination
+    )
+
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_sc_pagination"))
 async def delete_scs_list_pagination(callback: types.CallbackQuery):

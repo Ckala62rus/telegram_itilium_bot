@@ -519,6 +519,27 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
         reply_markup=btn_keyboard,
         parse_mode='HTML'
     )
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("back_change_status$"))
+async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
+    btns: dict = {}
+    sc_number = callback.data[19:]
+    await callback.answer()
+
+    btn_keyboard = get_callback_btns(btns={
+        "Скрыть информацию ↩️": "del_message",
+        "Поменять статус 🔁": f"show_state${sc_number}",
+    }, size=(1,))
+
+    await callback.message.edit_reply_markup(
+        reply_markup=btn_keyboard
+    )
+
+    # await bot.edit_message_text(
+    #     text=callback.message.text,
+    #     chat_id=callback.message.chat.id,
+    #     reply_markup=btn_keyboard,
+    #     parse_mode='HTML',
+    # )
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_search"))
@@ -800,6 +821,14 @@ async def show_sc_info_pagination_callback(
 async def delete_scs_list_pagination(callback: types.CallbackQuery):
     """
     Обработчик кнопки удаления списка, созданных мною заявок, с постраничной навигации
+    """
+    await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_responsible_sc_pagination"))
+async def delete_scs_list_pagination(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки удаления списка (пагинации) заявок в моей ответственности
     """
     await callback.message.delete()
 

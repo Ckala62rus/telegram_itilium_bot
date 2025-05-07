@@ -804,6 +804,14 @@ async def delete_scs_list_pagination(callback: types.CallbackQuery):
     await callback.message.delete()
 
 
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_responsible_sc_pagination"))
+async def delete_scs_list_pagination(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки удаления списка (пагинации) заявок в моей ответственности
+    """
+    await callback.message.delete()
+
+
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("sc$"))
 async def confirm_sc_handler(
         callback: types.CallbackQuery,

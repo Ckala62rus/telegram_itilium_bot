@@ -519,6 +519,52 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
         reply_markup=btn_keyboard,
         parse_mode='HTML'
     )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("show_state$"))
+async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
+    """
+    Обработчик кнопки "Поменять статус"
+    """
+    sc_number = callback.data[11:]
+    await callback.answer()
+    logger.debug(f"hide sc by number {sc_number}")
+
+    try:
+        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+    except Exception as e:
+        logger.debug(f"error for {callback.from_user.id} {sc_number} {e}")
+        logger.exception(e)
+        await callback.answer()
+        await callback.message.answer(f"При запросе в Итилиум произошла ошибка")
+        return None
+
+    btns: dict = {}
+
+    if response["new_state"]:
+        # btns["Поменять статус 🔁"] = f"show_state${sc_number}"
+        btns["Назад ↩️"] = f"back_change_status${sc_number}"
+        for state in response["new_state"]:
+            btns[f"{state} ✏"] = f"change_{sc_number}_state_{state}"
+
+
+    btn_keyboard = get_callback_btns(btns=btns, size=(1,2))
+
+    # await bot.edit_message_text(
+    #     text=callback.message.text,
+    #     reply_markup=btn_keyboard
+    # )
+
+    await callback.message.edit_reply_markup(
+        reply_markup=btn_keyboard
+    )
+
+    # await callback.message.answer(
+    #     text=callback.message.text,
+    #     reply_markup=btn_keyboard
+    # )
+
+
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("back_change_status$"))
 async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
     btns: dict = {}

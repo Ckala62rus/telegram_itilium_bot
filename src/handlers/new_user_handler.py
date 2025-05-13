@@ -476,7 +476,7 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
         logger.exception(e)
         await callback.answer()
         # await callback.message.answer(f"{e}")
-        await callback.message.answer(f"При запросе в Итилиум про")
+        await callback.message.answer(f"При запросе в Итилиум произошла ошибка")
         return None
 
     await callback.answer()
@@ -545,7 +545,7 @@ async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
         # btns["Поменять статус 🔁"] = f"show_state${sc_number}"
         btns["Назад ↩️"] = f"back_change_status${sc_number}"
         for state in response["new_state"]:
-            btns[f"{state} ✏"] = f"change_{sc_number}_state_{state}"
+            btns[f"{state} ✏"] = f"ch_st_{sc_number}${state}"
 
 
     btn_keyboard = get_callback_btns(btns=btns, size=(1,2))
@@ -566,7 +566,10 @@ async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("back_change_status$"))
-async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
+async def hide_sc_info_callback(callback: types.CallbackQuery):
+    """
+    Обработчик для скрытия статусов задачи
+    """
     btns: dict = {}
     sc_number = callback.data[19:]
     await callback.answer()
@@ -580,12 +583,58 @@ async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
         reply_markup=btn_keyboard
     )
 
-    # await bot.edit_message_text(
-    #     text=callback.message.text,
-    #     chat_id=callback.message.chat.id,
-    #     reply_markup=btn_keyboard,
-    #     parse_mode='HTML',
-    # )
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("ch_st_"))
+async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
+    """
+    Обработчик для смены статуса задачи (отложено, в работе, на согласование и т.д.)
+    """
+    await callback.answer()
+
+    waiting_message = await callback.message.answer(
+        text="Меняю статус, подождите..."
+    )
+
+    logger.debug(f"change status for sc => {callback.data}")
+    data: str = callback.data[6:]
+    data_after_split = data.split("$")
+
+    sc_number = data_after_split[0]
+    new_state = data_after_split[1]
+
+    logger.debug(f"sc number => {sc_number}")
+    logger.debug(f"sc status => {new_state}")
+
+    result: Response = await ItiliumBaseApi.change_sc_state(
+        telegram_user_id=callback.from_user.id,
+        sc_number=sc_number,
+        state=new_state
+    )
+
+    if result.status_code == httpx.codes.OK:
+        btn_keyboard = get_callback_btns(btns={
+            "Скрыть информацию ↩️": "del_message",
+            "Поменять статус 🔁": f"show_state${sc_number}",
+        }, size=(1,))
+
+        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+        # Формируем текст сообщения
+        message_text = Helpers.prepare_sc(response)
+
+        await waiting_message.delete()
+
+        await bot.edit_message_text(
+            text=message_text,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            parse_mode='HTML'
+        )
+
+        await callback.message.edit_reply_markup(
+            reply_markup=btn_keyboard
+        )
+
+    logger.debug(f"change state sc result => {result}")
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_search"))
@@ -1039,18 +1088,6 @@ async def set_comment_for_confirm_sc_handler(
     logger.debug(data)
     # проверяем если оценка 3,4,5, коментарий не обязателен и выводим кнопку отправить или добавить комментарий
     # проверяем если оценка 0,1,2, то комментарий обязателен
-
-
-@new_user_router.callback_query(F.data.startswith("responsibility_scs_client"))
-async def set_comment_for_confirm_sc_handler(
-        callback: types.CallbackQuery,
-        bot: Bot
-):
-    await callback.answer()
-    await bot.send_message(
-        chat_id=settings.BARS_GROUP_TELEGRAM_ID,
-        text="test message for group"
-    )
 
 
 @new_user_router.callback_query()

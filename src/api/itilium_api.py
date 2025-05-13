@@ -239,3 +239,17 @@ class ItiliumBaseApi:
         )
 
         return await (ItiliumBaseApi.send_request("POST", url, None))
+
+    @staticmethod
+    async def change_sc_state(
+            telegram_user_id: int,
+            sc_number: str,
+            state: str,
+    ) -> Response:
+        url = ApiUrls.CHANGE_STATE_SC.format(
+            telegram_user_id=telegram_user_id,
+            inc_number=sc_number,
+            new_state=state
+        )
+
+        return await (ItiliumBaseApi.send_request("POST", url, None))

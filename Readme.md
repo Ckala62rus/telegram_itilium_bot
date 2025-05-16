@@ -25,6 +25,11 @@ pip install --no-index --find-links /vendor -r requirements.txt
 ```
 - (install wheel package) https://stackoverflow.com/questions/51748058/all-dependencies-are-not-downloaded-with-pip-download
 
+### Add new dependency in container
+- If you want to ad new library and PyCharm don't see new dependency you need to do the following:
+```bash
+docker compose build backend_telegram_bot_itilium  --no-cache
+```
 
 ###
 main url

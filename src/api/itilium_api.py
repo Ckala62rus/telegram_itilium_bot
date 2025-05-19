@@ -253,3 +253,21 @@ class ItiliumBaseApi:
         )
 
         return await (ItiliumBaseApi.send_request("POST", url, None))
+
+    @staticmethod
+    async def change_sc_state_with_comment(
+            telegram_user_id: int,
+            sc_number: str,
+            state: str,
+            date_inc: str,
+            comment: str,
+    ) -> Response:
+        url = ApiUrls.CHANGE_STATE_SC_WITH_COMMENT.format(
+            telegram_user_id=telegram_user_id,
+            inc_number=sc_number,
+            new_state=state,
+            date_inc=date_inc,
+            comment=comment,
+        )
+
+        return await (ItiliumBaseApi.send_request("POST", url, None))

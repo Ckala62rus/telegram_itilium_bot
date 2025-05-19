@@ -14,6 +14,13 @@ class ApiUrls:
     CONFIRM_SC: str = "confirm_sc?telegram={telegram_user_id}&incident={incident}&mark={mark}"
     SCS_RESPONSIBLE: str = "list_sc_responsible?telegram={telegram_user_id}"
     CHANGE_STATE_SC: str = "change_state_sc?telegram={telegram_user_id}&inc_number={inc_number}&new_state={new_state}"
+    CHANGE_STATE_SC_WITH_COMMENT: str = ("change_state_sc?"
+                                         "telegram={telegram_user_id}"
+                                         "&inc_number={inc_number}"
+                                         "&new_state={new_state}"
+                                         "&date_inc={date_inc}"
+                                         "&comment={comment}"
+                                         )
 
 
 apiUrls = ApiUrls()

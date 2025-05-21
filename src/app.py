@@ -2,10 +2,12 @@ import asyncio
 import logging.config
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommandScopeAllPrivateChats
 
 from config.configuration import settings
 from common.bot_cmds_list import private
+from dialogs import custom_setup_dialogs
 from handlers.group_handler import user_group_router
 from handlers.new_user_handler import new_user_router
 # from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -22,9 +24,15 @@ from middleware.db_middleware import (
     ExecuteTimeHandlerMiddleware,
 )
 
+storage = MemoryStorage()
 bot = Bot(token=settings.BOT_TOKEN)
 bot.my_admins_list = []
-dp = Dispatcher()
+dp = Dispatcher(storage=storage)
+
+
+# Aiogram dialog registration
+custom_setup_dialogs(dp)
+
 
 logger.debug('init routers')
 dp.include_router(user_group_router)

@@ -6,11 +6,12 @@ import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram_dialog import DialogManager
 from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
-from config.configuration import settings
+from dialogs.bot_menu.states import ChangeScStatus
 from dto.paginate_scs_dto import PaginateScsDTO
 from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
 from filters.chat_types import ChatTypeFilter

@@ -585,15 +585,15 @@ async def hide_sc_info_callback(callback: types.CallbackQuery):
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("ch_st_"))
-async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
+async def hide_sc_info_callback(
+    callback: types.CallbackQuery,
+    bot: Bot,
+    dialog_manager: DialogManager,
+):
     """
     Обработчик для смены статуса задачи (отложено, в работе, на согласование и т.д.)
     """
     await callback.answer()
-
-    waiting_message = await callback.message.answer(
-        text="Меняю статус, подождите..."
-    )
 
     logger.debug(f"change status for sc => {callback.data}")
     data: str = callback.data[6:]
@@ -604,6 +604,23 @@ async def hide_sc_info_callback(callback: types.CallbackQuery, bot: Bot):
 
     logger.debug(f"sc number => {sc_number}")
     logger.debug(f"sc status => {new_state}")
+
+    """
+    Если статус 'Отложено', то нам необходимо запросить комментарий и дату,
+    на которое число, необходимо отложить задачу.
+    """
+    if new_state == "05_Отложено":
+        await dialog_manager.start(
+            state=ChangeScStatus.enter_comment,
+            data={
+                "sc_number": sc_number,
+                "new_state": new_state
+            })
+        return
+
+    waiting_message = await callback.message.answer(
+        text="Меняю статус, подождите..."
+    )
 
     result: Response = await ItiliumBaseApi.change_sc_state(
         telegram_user_id=callback.from_user.id,

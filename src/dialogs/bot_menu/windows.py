@@ -1,6 +1,6 @@
 from aiogram_dialog import Window
 from aiogram_dialog.widgets.input import TextInput
-from aiogram_dialog.widgets.kbd import Cancel, Back, Button, Calendar, Group
+from aiogram_dialog.widgets.kbd import Cancel, Back, Button, Calendar, Group, CalendarScope
 from aiogram_dialog.widgets.text import Const
 
 from dialogs.bot_menu import keyboards, states, getters

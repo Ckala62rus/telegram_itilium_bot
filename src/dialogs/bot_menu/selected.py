@@ -44,6 +44,13 @@ async def confirm_comment(
     ctx = manager.current_context()
     ctx.dialog_data.update(comment=comment)
 
+    data: dict = manager.start_data
+    state = data.get("new_state")
+
+    if state == "06_В ожидании ответа":
+        await manager.switch_to(ChangeScStatus.confirm)
+        return
+
     await manager.switch_to(ChangeScStatus.enter_date)
 
 

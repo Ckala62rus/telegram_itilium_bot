@@ -62,3 +62,18 @@ def confirm_change_state_sc():
         ),
         state=ChangeScStatus.confirm
     )
+
+def confirm_change_state_sc_without_date():
+    return Window(
+        Const("Подтвердите смену статуса."),
+        Group(
+            Cancel(Const("Отмена ❌")),
+            Button(
+                text=Const("Подтвердить ✅"),
+                on_click=selected.confirm_change_state_sc_on_new,
+                id="change_state_sc"
+            ),
+            width=2
+        ),
+        state=ChangeScStatus.confirm_without_date
+    )

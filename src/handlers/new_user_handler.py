@@ -610,7 +610,7 @@ async def hide_sc_info_callback(
     Если статус 'Отложено', то нам необходимо запросить комментарий и дату,
     на которое число, необходимо отложить задачу.
     """
-    if new_state == "05_Отложено":
+    if new_state == "05_Отложено" or new_state == "06_В ожидании ответа":
         await dialog_manager.start(
             state=ChangeScStatus.enter_comment,
             data={

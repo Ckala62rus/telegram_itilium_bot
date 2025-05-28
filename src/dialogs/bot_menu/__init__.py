@@ -13,5 +13,6 @@ def bot_menu_dialogs():
             windows.comment_for_change_sc_status(),
             windows.set_date_for_sc(),
             windows.confirm_change_state_sc(),
+            windows.confirm_change_state_sc_without_date(),
         ),
     ]

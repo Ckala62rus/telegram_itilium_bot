@@ -48,7 +48,7 @@ async def confirm_comment(
     state = data.get("new_state")
 
     if state == "06_В ожидании ответа":
-        await manager.switch_to(ChangeScStatus.confirm)
+        await manager.switch_to(ChangeScStatus.confirm_without_date)
         return
 
     await manager.switch_to(ChangeScStatus.enter_date)
@@ -81,15 +81,15 @@ async def confirm_change_state_sc_on_new(
     new_state = data['new_state']
 
     await callback.answer()
-    await callback.message.answer(
-        f"""
-        comment: {comment}
-        new_date: {new_date}
-        sc_number: {sc_number}
-        new_state: {new_state}
-        Данные отправлены!
-        """
-    )
+    # await callback.message.answer(
+    #     f"""
+    #     comment: {comment}
+    #     new_date: {new_date}
+    #     sc_number: {sc_number}
+    #     new_state: {new_state}
+    #     Данные отправлены!
+    #     """
+    # )
     await manager.done()
 
     send_data_to_api = await callback.bot.send_message(

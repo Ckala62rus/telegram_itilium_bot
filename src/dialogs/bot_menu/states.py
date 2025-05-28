@@ -15,3 +15,4 @@ class ChangeScStatus(StatesGroup):
     enter_comment = State()
     enter_date = State()
     confirm = State()
+    confirm_without_date = State()

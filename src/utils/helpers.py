@@ -157,8 +157,8 @@ class Helpers:
     async def get_paginated_kb_responsible_scs(scs: list, page: int = 0) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
 
-        start_offset = page * 2
-        end_offset = start_offset + 2
+        start_offset = page * 10
+        end_offset = start_offset + 10
         count_page = len(scs)
 
         for elem in scs[start_offset:end_offset]:

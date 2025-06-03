@@ -59,6 +59,7 @@ docker compose -f docker-compose_prod.yaml build --no-cache
 #### Create new version prod image
 ```bash
 docker image tag ckala62rus/backend_telegram_bot_itilium_prod:latest ckala62rus/backend_telegram_bot_itilium_prod:1.0.0
+docker image tag ckala62rus/backend_telegram_bot_itilium:latest ckala62rus/backend_telegram_bot_itilium_prod:7.0.0
 ```
 
 #### Push new images to DockerHub

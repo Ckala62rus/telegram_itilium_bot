@@ -11,6 +11,7 @@ from database.orm_query_user import get_user_by_phone_number, \
     set_admin_for_user
 from filters.chat_types import ChatTypeFilter, IsAdminFromDatabase
 from kbds.reply import get_keyboard
+from utils.message_templates import MessageTemplates
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class AddAdmin(StatesGroup):
 @admin_router.message(StateFilter(None), F.text == str(AdminEnums.ASSIGN_ADMIN),)
 async def find_user_for_set_admin(message: types.Message, state: FSMContext):
     await message.answer(
-        "Введите номер телефон для поиска ( пример: +78005553535 )",
+        MessageTemplates.ENTER_PHONE_FOR_ADMIN,
         reply_markup=types.ReplyKeyboardRemove()
     )
     await state.set_state(AddAdmin.phone)

@@ -10,6 +10,7 @@ from bot_enums.user_enums import UserText, UserButtonText
 from dto.paginate_scs_dto import PaginateScsDTO
 from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
 from kbds.reply import get_keyboard
+from utils.message_templates import MessageTemplates
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +48,14 @@ async def paginate_scs_logic(
     logger.debug(f"user: {user['servicecalls']}")
 
     await callback.answer()
-    send_message_for_search = await callback.message.answer("Запрашиваю заявки, подождите...")
+    send_message_for_search = await callback.message.answer(MessageTemplates.LOADING_REQUESTS)
 
     my_scs: list = user['servicecalls']
 
     if not my_scs:
         await callback.answer()
         await send_message_for_search.delete()
-        await callback.message.answer("У вас нет созданных заявок заявок")
+        await callback.message.answer(MessageTemplates.NO_CREATED_ISSUES)
         return {}
 
     results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
@@ -73,12 +74,12 @@ async def paginate_responsible_scs_logic(
     my_scs = json.loads(response.text)
 
     await callback.answer()
-    send_message_for_search = await callback.message.answer("Запрашиваю заявки, подождите...")
+    send_message_for_search = await callback.message.answer(MessageTemplates.LOADING_REQUESTS)
 
     if not my_scs:
         await callback.answer()
         await send_message_for_search.delete()
-        await callback.message.answer("У вас нет созданных заявок заявок")
+        await callback.message.answer(MessageTemplates.NO_RESPONSIBLE_ISSUES)
         return {}
 
     results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)

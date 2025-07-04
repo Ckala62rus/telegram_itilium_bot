@@ -20,6 +20,7 @@ from filters.chat_types import ChatTypeFilter
 from kbds import reply
 from kbds.reply import get_keyboard
 from utils.logger_project import setup_logger
+from utils.message_templates import MessageTemplates
 
 user_private_router = Router()
 user_private_router.message.filter(ChatTypeFilter(['private']))
@@ -151,7 +152,7 @@ async def cancel_handler_find_party(message: types.Message, state: FSMContext) -
         return
     await state.clear()
     await message.answer(
-        str(FindPartyText.ACTIONS_CANCELED),
+        MessageTemplates.ACTIONS_CANCELED,
         reply_markup=types.ReplyKeyboardRemove()
     )
 

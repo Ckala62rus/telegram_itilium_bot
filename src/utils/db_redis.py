@@ -5,8 +5,9 @@ import redis
 from redis import Redis, AuthenticationError
 
 from config.configuration import settings
+from utils.logger_project import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class RedisCli:

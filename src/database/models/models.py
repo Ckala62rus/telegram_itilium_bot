@@ -1,5 +1,6 @@
 import datetime
 from typing import Optional
+import logging
 
 from sqlalchemy import (
     Table,
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database.db import Base
 
+logger = logging.getLogger(__name__)
 
 # metadata_obj = MetaData()
 #

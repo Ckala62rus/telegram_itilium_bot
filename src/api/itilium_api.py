@@ -1,7 +1,5 @@
 import asyncio
 import json
-import logging
-import ssl
 
 import httpx
 from aiogram import types
@@ -11,8 +9,9 @@ from httpx import Response
 from api.urls import ApiUrls
 from config.configuration import settings
 from utils.helpers import Helpers
+from utils.logger_project import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class ItiliumBaseApi:

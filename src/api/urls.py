@@ -1,4 +1,7 @@
 from config.configuration import settings
+from utils.logger_project import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class ApiUrls:

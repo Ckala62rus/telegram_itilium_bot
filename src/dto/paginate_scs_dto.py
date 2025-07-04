@@ -1,6 +1,9 @@
 import json
 
 from redis import Redis
+from utils.logger_project import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class PaginateScsDTO:

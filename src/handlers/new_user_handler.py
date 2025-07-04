@@ -66,7 +66,7 @@ async def handler_menu_command(
 ):
     """
     Метод, определяющий возможность выбора "типов" заявок, доступных пользователю. Список "типов" заявок
-    выводится в зависимоти от типа пользователя (сотрудник IT/нет)
+    выводится в зависимости от типа пользователя (сотрудник IT/нет)
     """
 
     await message.delete()
@@ -94,7 +94,7 @@ async def handler_menu_command(
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("crate_new_issue"))
 async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMContext):
     """
-    Метод инициирует создание нового обращение с FSM состоянием.
+    Метод инициирует создание нового обращения с FSM состоянием.
     (Обращение создается как с текстом, так и файлами, которые можно приложить к описанию)
     """
     logger.debug("Perform callback command create_new_issue and get cancel button")

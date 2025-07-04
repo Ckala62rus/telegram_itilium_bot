@@ -19,11 +19,12 @@ from database.orm_query_user import get_user_by_telegram_id, add_user, \
 from filters.chat_types import ChatTypeFilter
 from kbds import reply
 from kbds.reply import get_keyboard
+from utils.logger_project import setup_logger
 
 user_private_router = Router()
 user_private_router.message.filter(ChatTypeFilter(['private']))
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 @user_private_router.message(CommandStart())

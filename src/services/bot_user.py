@@ -1,6 +1,9 @@
 from datetime import datetime
+import logging
 
 from api.itilium_api import ItiliumBaseApi
+
+logger = logging.getLogger(__name__)
 
 
 class BotUser:

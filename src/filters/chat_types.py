@@ -3,6 +3,9 @@ from aiogram.filters import Filter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.orm_query_user import get_admins_user
+from utils.logger_project import setup_logger
+
+logger = setup_logger(__name__)
 
 
 # filter for check private of public chat

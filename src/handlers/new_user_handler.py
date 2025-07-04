@@ -20,7 +20,6 @@ from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
 from services.user_private_service import base_start_handler, paginate_scs_logic, paginate_responsible_scs_logic
-from utils.db_redis import redis_client
 from utils.helpers import Helpers
 
 new_user_router = Router()
@@ -734,15 +733,11 @@ async def show_all_client_scs_callback(
     Обработчик кнопки "Мои заявки".
     Выводится весь список созданных мной заявок, с постраничной навигацией
     """
-    r = redis_client
     user_id = callback.from_user.id
     scs = None
     send_message_for_search = None
 
-    paginate_dto: PaginateScsDTO = PaginateScsDTO(
-        redis=r,
-        user_id=user_id,
-    )
+    paginate_dto: PaginateScsDTO = PaginateScsDTO(user_id=user_id)
 
     state_data = await state.get_data()
     is_loading = state_data.get("load", None)
@@ -751,7 +746,7 @@ async def show_all_client_scs_callback(
     if is_loading:
         return
 
-    if not r.exists(user_id):
+    if not await paginate_dto.exists():
         # Защищаем от повторного запроса
         await state.set_state(LoadPagination.load)
         await state.update_data(load=True)
@@ -761,9 +756,9 @@ async def show_all_client_scs_callback(
         send_message_for_search = result.get("send_message_for_search", None)
 
         # извлекаем из редиса
-        scs = paginate_dto.get_cache_scs()
+        scs = await paginate_dto.get_cache_scs()
     else:
-        scs = paginate_dto.get_cache_scs()
+        scs = await paginate_dto.get_cache_scs()
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs)
 
@@ -787,15 +782,11 @@ async def show_sc_info_pagination_callback(
     """
     Обработчик кнопок постраничной навигации в отображении списка, созданных мною заявок
     """
-    r = redis_client
     user_id = callback.from_user.id
     scs = None
     send_message_for_search = None
 
-    paginate_dto: PaginateScsDTO = PaginateScsDTO(
-        redis=r,
-        user_id=user_id,
-    )
+    paginate_dto: PaginateScsDTO = PaginateScsDTO(user_id=user_id)
 
     state_data = await state.get_data()
     is_loading = state_data.get("load", None)
@@ -804,7 +795,7 @@ async def show_sc_info_pagination_callback(
     if is_loading:
         return
 
-    if not r.exists(user_id):
+    if not await paginate_dto.exists():
         # Защищаем от повторного запроса
         await state.set_state(LoadPagination.load)
         await state.update_data(load=True)
@@ -814,10 +805,10 @@ async def show_sc_info_pagination_callback(
         send_message_for_search = result.get("send_message_for_search", None)
 
         # извлекаем из редиса
-        scs = paginate_dto.get_cache_scs()
+        scs = await paginate_dto.get_cache_scs()
         await state.clear()
     else:
-        scs = paginate_dto.get_cache_scs()
+        scs = await paginate_dto.get_cache_scs()
 
     data_with_pagination = await Helpers.get_paginated_kb_scs(scs, int(callback.data.split("sc_page_")[1]))
 
@@ -837,7 +828,6 @@ async def show_responsibility_scs_client(
     callback: types.CallbackQuery,
     state: FSMContext,
 ):
-    r = redis_client
     user_id = callback.from_user.id
     scs = None
     send_message_for_search = None
@@ -846,23 +836,20 @@ async def show_responsibility_scs_client(
     is_loading = state_data.get("load", None)
     await callback.answer()
 
-    paginate_dto: PaginateResponsibleScsDTO = PaginateResponsibleScsDTO(
-        redis=r,
-        user_id=user_id,
-    )
+    paginate_dto: PaginateResponsibleScsDTO = PaginateResponsibleScsDTO(user_id=user_id)
 
     if is_loading:
         return
 
-    if not r.exists(f"responsible:{str(user_id)}"):
+    if not await paginate_dto.exists():
         result: dict = await paginate_responsible_scs_logic(callback, paginate_dto)
 
         send_message_for_search = result.get("send_message_for_search", None)
 
         # извлекаем из редиса
-        scs = paginate_dto.get_cache_responsible_scs()
+        scs = await paginate_dto.get_cache_responsible_scs()
     else:
-        scs = paginate_dto.get_cache_responsible_scs()
+        scs = await paginate_dto.get_cache_responsible_scs()
 
     data_with_pagination = await Helpers.get_paginated_kb_responsible_scs(scs)
 
@@ -886,15 +873,11 @@ async def show_sc_info_pagination_callback(
     """
     Обработчик кнопок постраничной навигации в отображении списка, созданных мною заявок
     """
-    r = redis_client
     user_id = callback.from_user.id
     scs = None
     send_message_for_search = None
 
-    paginate_dto: PaginateResponsibleScsDTO = PaginateResponsibleScsDTO(
-        redis=r,
-        user_id=user_id,
-    )
+    paginate_dto: PaginateResponsibleScsDTO = PaginateResponsibleScsDTO(user_id=user_id)
 
     state_data = await state.get_data()
     is_loading = state_data.get("load", None)
@@ -903,7 +886,7 @@ async def show_sc_info_pagination_callback(
     if is_loading:
         return
 
-    if not r.exists(f"responsible:{str(user_id)}"):
+    if not await paginate_dto.exists():
         # Защищаем от повторного запроса
         await state.set_state(LoadPagination.load)
         await state.update_data(load=True)
@@ -913,10 +896,10 @@ async def show_sc_info_pagination_callback(
         send_message_for_search = result.get("send_message_for_search", None)
 
         # извлекаем из редиса
-        scs = paginate_dto.get_cache_responsible_scs()
+        scs = await paginate_dto.get_cache_responsible_scs()
         await state.clear()
     else:
-        scs = paginate_dto.get_cache_responsible_scs()
+        scs = await paginate_dto.get_cache_responsible_scs()
 
     data_with_pagination = await Helpers.get_paginated_kb_responsible_scs(scs, int(callback.data.split("responsible_sc_page_")[1]))
 

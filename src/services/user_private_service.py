@@ -59,7 +59,7 @@ async def paginate_scs_logic(
 
     results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
 
-    paginate_dto.set_cache_scs(results)
+    await paginate_dto.set_cache_scs(results)
 
     return {"send_message_for_search": send_message_for_search}
 
@@ -83,6 +83,6 @@ async def paginate_responsible_scs_logic(
 
     results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
 
-    paginate_dto.set_cache_responsible_scs(results)
+    await paginate_dto.set_cache_responsible_scs(results)
 
     return {"send_message_for_search": send_message_for_search}

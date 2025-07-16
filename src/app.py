@@ -13,10 +13,10 @@ from handlers.new_user_handler import new_user_router
 # from apscheduler.schedulers.asyncio import AsyncIOScheduler
 # from sheduler import scheduler_tasks
 
-from utils.logger_project import logging_config
+from utils.logger_project import setup_logger, LOG_LEVEL_INFO, LOG_LEVEL_DEBUG
 
 # Загружаем настройки логирования из словаря `logging_config`
-logging.config.dictConfig(logging_config)
+# logging.config.dictConfig(logging_config)
 logger = logging.getLogger(__name__)
 
 
@@ -75,4 +75,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    setup_logger(level=LOG_LEVEL_DEBUG)  # INFO по умолчанию, можно изменить на LOG_LEVEL_DEBUG при необходимости
     asyncio.run(main())

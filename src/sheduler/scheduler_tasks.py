@@ -1,4 +1,7 @@
 from aiogram import Bot
+from utils.logger_project import setup_logger
+
+logger = setup_logger(__name__)
 
 
 async def every_minutes(bot: Bot):

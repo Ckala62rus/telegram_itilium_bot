@@ -7,8 +7,9 @@ from aiogram import Bot
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from io import StringIO
 from html.parser import HTMLParser
+from utils.logger_project import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class MLStripper(HTMLParser):

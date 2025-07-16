@@ -1,7 +1,10 @@
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from database.models.models import User
+
+logger = logging.getLogger(__name__)
 
 
 async def get_all_users(session: AsyncSession):

@@ -1,4 +1,7 @@
 from aiogram.fsm.state import StatesGroup, State
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BotMenu(StatesGroup):

@@ -2,29 +2,12 @@ from aiogram_dialog import Window
 from aiogram_dialog.widgets.input import TextInput
 from aiogram_dialog.widgets.kbd import Cancel, Back, Button, Calendar, Group, CalendarScope
 from aiogram_dialog.widgets.text import Const
+import logging
 
-from dialogs.bot_menu import keyboards, states, getters
 from dialogs.bot_menu import selected
 from dialogs.bot_menu.states import ChangeScStatus
 
-
-def categories_window():
-    return Window(
-        Const("Choose category that you want"),
-        keyboards.paginated_categories(selected.on_chosen_category),
-        Cancel(Const("Exit")),
-        state=states.BotMenu.select_categories,
-        getter=getters.get_categories,
-    )
-
-def product_window():
-    return Window(
-        Const("Choose product that you want"),
-        Back(Const("<< Select another category")),
-        Cancel(Const("Exit")),
-        state=states.BotMenu.select_products,
-        getter=getters.get_categories,
-    )
+logger = logging.getLogger(__name__)
 
 def comment_for_change_sc_status():
     return Window(

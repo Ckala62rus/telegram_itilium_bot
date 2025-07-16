@@ -1,10 +1,13 @@
 from aiogram import types, Router, Bot, F
+import logging
 
 from filters.chat_types import ChatTypeFilter
 from kbds.inline import get_callback_btns
 
 user_group_router = Router()
 user_group_router.message.filter(ChatTypeFilter(['group', 'supergroup']))
+
+logger = logging.getLogger(__name__)
 
 
 @user_group_router.message(F.text == 'www')

@@ -5,9 +5,12 @@ import httpx
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import DialogManager
 from httpx import Response
+import logging
 
 from api.itilium_api import ItiliumBaseApi
 from dialogs.bot_menu.states import BotMenu, ChangeScStatus
+
+logger = logging.getLogger(__name__)
 
 
 async def on_chosen_category(
@@ -65,6 +68,20 @@ async def on_date_selected(
 
     await callback.answer()
     await manager.switch_to(ChangeScStatus.confirm)
+
+
+async def on_date_selected_second(
+    callback: CallbackQuery,
+    widget,
+    manager: DialogManager,
+    selected_date: date,
+):
+    ctx = manager.current_context()
+    ctx.dialog_data.update(new_date=str(selected_date))
+
+    await callback.answer()
+    await manager.switch_to(ChangeScStatus.test_calendar)
+    print("******************************")
 
 
 async def confirm_change_state_sc_on_new(

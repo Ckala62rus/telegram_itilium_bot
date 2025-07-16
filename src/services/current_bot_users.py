@@ -1,6 +1,9 @@
 from datetime import datetime
+import logging
 
 from services.bot_user import BotUser
+
+logger = logging.getLogger(__name__)
 
 
 class CurrentBotUsers:

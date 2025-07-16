@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import ssl
 
 import httpx
 from aiogram import types
@@ -13,6 +12,40 @@ from config.configuration import settings
 from utils.helpers import Helpers
 
 logger = logging.getLogger(__name__)
+
+
+class AsyncHttpClient:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._client = None
+        return cls._instance
+
+    async def get_client(self):
+        if self._client is None:
+            try:
+                self._client = httpx.AsyncClient(
+                    auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD),
+                    timeout=30.0,
+                    limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
+                )
+                logger.info("HTTP client initialized successfully.")
+            except Exception as e:
+                logger.error(f'❌ Ошибка инициализации HTTP клиента: {e}')
+                raise
+        return self._client
+
+    async def close(self):
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+            logger.info("HTTP client closed.")
+
+
+# Экземпляр singleton-клиента
+async_http_client = AsyncHttpClient()
 
 
 class ItiliumBaseApi:
@@ -85,13 +118,6 @@ class ItiliumBaseApi:
 
         url = ApiUrls.CREATE_SC
 
-        # if len(files) > 0:
-        #     url += "?"
-        #     url_params = ";".join(files)
-        #     url += f"files={url_params}"
-        #
-        # logger.debug(f"url: {url}")
-
         if len(files) > 0:
             request_data["files"] = json.dumps(files)
 
@@ -111,18 +137,17 @@ class ItiliumBaseApi:
         logger.debug(f"send_request data {data}")
 
         try:
-            async with httpx.AsyncClient() as client:
-                return await client.request(
-                    method=method,
-                    url=settings.ITILIUM_URL + url,
-                    data=data,
-                    auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD),
-                    timeout=30.0,
-                    params=params
-                )
+            client = await async_http_client.get_client()
+            return await client.request(
+                method=method,
+                url=settings.ITILIUM_URL + url,
+                data=data,
+                params=params
+            )
         except Exception as e:
             logger.debug(f"error for {method} {url} {data}")
             logger.exception(e)
+            raise
 
     @staticmethod
     async def accept_callback_handler(callback: types.CallbackQuery) -> Response:
@@ -151,22 +176,21 @@ class ItiliumBaseApi:
 
     @staticmethod
     async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response | None:
-        # try:
-        async with httpx.AsyncClient() as client:
+        try:
+            client = await async_http_client.get_client()
             resp = await client.post(settings.ITILIUM_URL + ApiUrls.FIND_SC.format(
                 telegram_user_id=telegram_user_id,
                 sc_number=sc_number
-            ), auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD), timeout=30.0)
+            ))
 
             logger.debug(f"response code: {resp.status_code} | response text: {resp.text}")
 
             if resp.status_code == httpx.codes.OK and len(resp.text) > 0:
                 return resp.json()
-
-    # except Exception as e:
-    #     logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
-    #     logger.exception(e)
-    #     return None
+        except Exception as e:
+            logger.debug(f"error for {telegram_user_id} {sc_number} {e}")
+            logger.exception(e)
+            return None
 
     @staticmethod
     async def get_task_for_async_find_sc_by_id(scs: list, callback: CallbackQuery):
@@ -197,10 +221,6 @@ class ItiliumBaseApi:
             url_params = ";".join(files)
             url += f"&files={url_params}"
             logger.debug(f"url: {url}")
-
-            # data = dict()
-            # data["files"] = json.dumps(files)
-            # logger.debug(f"files to send itilium > {json.dumps(files)}")
 
         return await (ItiliumBaseApi
         .send_request(

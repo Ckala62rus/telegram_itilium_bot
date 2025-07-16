@@ -1,4 +1,5 @@
 from aiogram.fsm.state import StatesGroup, State
+from utils.logger_project import setup_logger
 
 
 __all__ = [
@@ -8,6 +9,9 @@ __all__ = [
     'CreateComment',
     'SearchSC',
 ]
+
+
+logger = setup_logger(__name__)
 
 
 class CreateNewIssue(StatesGroup):

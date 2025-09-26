@@ -184,6 +184,78 @@ class Helpers:
         return builder.as_markup()
 
     @staticmethod
+    async def get_paginated_kb_teams(teams: list, page: int = 0) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        start_offset = page * 10
+        end_offset = start_offset + 10
+        count_page = len(teams)
+
+        for elem in teams[start_offset:end_offset]:
+            # Проверяем, является ли elem уже словарем или строкой JSON
+            if isinstance(elem, dict):
+                team = elem
+            else:
+                team = json.loads(elem)
+            builder.row(InlineKeyboardButton(
+                text=team["responsibleTeamTitle"],
+                callback_data=f"select_team${team['responsibleTeamId']}"
+            ))
+
+        buttons_row = []
+
+        if page > 0:
+            buttons_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"teams_page_{page - 1}", ))
+
+        if page != count_page and end_offset < count_page:
+            buttons_row.append(InlineKeyboardButton(text="➡️", callback_data=f"teams_page_{page + 1}", ))
+
+        builder.row(*buttons_row)
+
+        builder.row(InlineKeyboardButton(text="❌", callback_data=f"delete_teams_pagination", ))
+
+        return builder.as_markup()
+
+    @staticmethod
+    async def get_paginated_kb_employees(employees: list, page: int = 0) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        start_offset = page * 10
+        end_offset = start_offset + 10
+        count_page = len(employees)
+
+        for elem in employees[start_offset:end_offset]:
+            # Проверяем, является ли elem уже словарем или строкой JSON
+            if isinstance(elem, dict):
+                employee = elem
+            else:
+                employee = json.loads(elem)
+            builder.row(InlineKeyboardButton(
+                text=employee["responsibleEmployeeTitle"],
+                callback_data=f"select_employee${employee['responsibleEmployeeId']}"
+            ))
+
+        buttons_row = []
+
+        if page > 0:
+            buttons_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"employees_page_{page - 1}", ))
+
+        if page != count_page and end_offset < count_page:
+            buttons_row.append(InlineKeyboardButton(text="➡️", callback_data=f"employees_page_{page + 1}", ))
+
+        builder.row(*buttons_row)
+
+        # Добавляем кнопку "Назад к подразделениям"
+        builder.row(InlineKeyboardButton(text="Назад к подразделениям ⬅️", callback_data="back_to_teams"))
+
+        # Добавляем кнопку "Назначить на подразделение"
+        builder.row(InlineKeyboardButton(text="Назначить на подразделение 🏢", callback_data="assign_to_team"))
+
+        builder.row(InlineKeyboardButton(text="❌", callback_data=f"delete_employees_pagination", ))
+
+        return builder.as_markup()
+
+    @staticmethod
     def delete_html_tags_from_text(text: str) -> str:
         s = MLStripper()
         s.feed(text)

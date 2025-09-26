@@ -1,5 +1,7 @@
 import asyncio
 import logging.config
+import signal
+import sys
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -14,9 +16,9 @@ from handlers.new_user_handler import new_user_router
 # from sheduler import scheduler_tasks
 
 from utils.logger_project import setup_logger, LOG_LEVEL_INFO, LOG_LEVEL_DEBUG
+from utils.http_client import close_http_client
+from utils.db_redis import async_redis_client
 
-# Загружаем настройки логирования из словаря `logging_config`
-# logging.config.dictConfig(logging_config)
 logger = logging.getLogger(__name__)
 
 
@@ -42,8 +44,40 @@ logger.debug('success init routers')
 ALLOWED_UPDATES = ['message', 'edited_message', 'callback_query']
 
 
+async def shutdown(signal, loop):
+    """Корректное завершение приложения"""
+    logger.info(f"Получен сигнал {signal.name}...")
+    
+    # Останавливаем бота
+    await bot.session.close()
+    
+    # Закрываем HTTP клиент
+    await close_http_client()
+    
+    # Закрываем Redis соединение
+    try:
+        redis_client = await async_redis_client.get_client()
+        await redis_client.close()
+        logger.info("Redis соединение закрыто")
+    except Exception as e:
+        logger.error(f"Ошибка при закрытии Redis: {e}")
+    
+    # Останавливаем event loop
+    loop.stop()
+    logger.info("Приложение корректно завершено")
+
+
 async def main():
     logger.debug('start application')
+    
+    # Настройка обработчиков сигналов для корректного завершения
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(
+            sig,
+            lambda s=sig: asyncio.create_task(shutdown(s, loop))
+        )
+    
     # cron scheduler apscheduler
     # scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     # scheduler.add_job(scheduler_tasks.every_minutes, trigger='interval', seconds=60, kwargs={'bot': bot})
@@ -60,18 +94,17 @@ async def main():
         scope=BotCommandScopeAllPrivateChats()
     )
     logger.debug('start polling')
+    
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-    except KeyboardInterrupt as k:
-        logger.error("KeyboardInterrupt exception")
-        logger.exception(k)
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал прерывания")
     except Exception as e:
-        logger.error("Some exception")
+        logger.error("Критическая ошибка в приложении")
         logger.exception(e)
+        sys.exit(1)
     finally:
-        logger.debug("close db connection")
-        # await db.close()
-        logger.info("application was stopped.")
+        logger.info("Приложение остановлено")
 
 
 if __name__ == "__main__":

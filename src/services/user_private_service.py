@@ -9,6 +9,7 @@ from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserText, UserButtonText
 from dto.paginate_scs_dto import PaginateScsDTO
 from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
+from dto.paginate_teams_dto import PaginateTeamsDTO
 from kbds.reply import get_keyboard
 from utils.message_templates import MessageTemplates
 
@@ -85,5 +86,31 @@ async def paginate_responsible_scs_logic(
     results = await ItiliumBaseApi.get_task_for_async_find_sc_by_id(scs=my_scs, callback=callback)
 
     await paginate_dto.set_cache_responsible_scs(results)
+
+    return {"send_message_for_search": send_message_for_search}
+
+
+async def paginate_teams_logic(
+    callback: types.CallbackQuery,
+    paginate_dto: PaginateTeamsDTO,
+) -> dict:
+    """
+    Логика получения и кэширования подразделений
+    """
+    await callback.answer()
+    send_message_for_search = await callback.message.answer("Загружаю подразделения...")
+
+    try:
+        response = await ItiliumBaseApi.get_responsibles(callback.from_user.id, paginate_dto.sc_number)
+        if response.status_code == 200:
+            responsibles_data = response.json()
+            await paginate_dto.set_cache_teams(responsibles_data)
+        else:
+            await callback.message.answer("Ошибка получения подразделений")
+            return {}
+    except Exception as e:
+        logger.error(f"Error getting teams: {e}")
+        await callback.message.answer("Ошибка получения подразделений")
+        return {}
 
     return {"send_message_for_search": send_message_for_search}

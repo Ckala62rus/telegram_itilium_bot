@@ -14,12 +14,13 @@ from bot_enums.user_enums import UserButtonText
 from dialogs.bot_menu.states import ChangeScStatus
 from dto.paginate_scs_dto import PaginateScsDTO
 from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
+from dto.paginate_teams_dto import PaginateTeamsDTO
 from filters.chat_types import ChatTypeFilter
 from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc, LoadPaginationResponsible
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
-from services.user_private_service import base_start_handler, paginate_scs_logic, paginate_responsible_scs_logic
+from services.user_private_service import base_start_handler, paginate_scs_logic, paginate_responsible_scs_logic, paginate_teams_logic
 from utils.helpers import Helpers
 from utils.message_templates import MessageTemplates, MessageFormatter, ButtonTemplates
 
@@ -421,7 +422,7 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     if response is None:
         return await callback.message.answer(MessageFormatter.issue_not_found(sc_number))
 
-    logger.debug(f"find_sc_by_id | {response}")
+    # logger.debug(f"find_sc_by_id | {response}")
 
     # Формируем текст сообщения
     message_text = Helpers.prepare_sc(response)
@@ -430,6 +431,9 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
 
     if response["state"] != 'registered':
         btns = ButtonTemplates.hide_and_change_status(sc_number)
+        # Добавляем кнопку смены ответственного если поле change_responsible равно true
+        if response.get("change_responsible") == True:
+            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
     else:
         btns = ButtonTemplates.hide_info()
 
@@ -484,10 +488,20 @@ async def hide_sc_info_callback(callback: types.CallbackQuery):
     sc_number = callback.data[19:]
     await callback.answer()
 
-    btn_keyboard = get_callback_btns(btns={
+    # Восстанавливаем набор кнопок, включая "Сменить ответственного", если доступно
+    btns = {
         "Скрыть информацию ↩️": "del_message",
         "Поменять статус 🔁": f"show_state${sc_number}",
-    }, size=(1,))
+    }
+
+    try:
+        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+        if response and response.get("change_responsible") is True:
+            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
+    except Exception:
+        pass
+
+    btn_keyboard = get_callback_btns(btns=btns, size=(1,))
 
     await callback.message.edit_reply_markup(
         reply_markup=btn_keyboard
@@ -539,12 +553,21 @@ async def hide_sc_info_callback(
     )
 
     if result.status_code == httpx.codes.OK:
-        btn_keyboard = get_callback_btns(btns={
+        # Получаем обновленные данные заявки
+        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+        
+        # Формируем кнопки
+        btns = {
             "Скрыть информацию ↩️": "del_message",
             "Поменять статус 🔁": f"show_state${sc_number}",
-        }, size=(1,))
-
-        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+        }
+        
+        # Добавляем кнопку смены ответственного если поле change_responsible равно true
+        if response and response.get("change_responsible") == True:
+            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
+        
+        btn_keyboard = get_callback_btns(btns=btns, size=(1,))
+        
         # Формируем текст сообщения
         message_text = Helpers.prepare_sc(response)
 
@@ -624,6 +647,453 @@ async def hide_sc_info_callback(callback: types.CallbackQuery):
     Обработчик кнопки "Скрыть информацию"
     """
     await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("change_responsible$"))
+async def change_responsible_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик кнопки "Сменить ответственного"
+    """
+    sc_number = callback.data[19:]  # Убираем "change_responsible$"
+    user_id = callback.from_user.id
+    
+    paginate_dto: PaginateTeamsDTO = PaginateTeamsDTO(user_id=user_id, sc_number=sc_number)
+    
+    await callback.answer()
+    
+    # Сохраняем sc_number в состоянии
+    await state.update_data(sc_number=sc_number)
+    
+    send_message_for_search = None
+    
+    if not await paginate_dto.exists():
+        # Защищаем от повторного запроса
+        await state.set_state(LoadPagination.load)
+        await state.update_data(load=True)
+        
+        logger.debug(f"key with name {user_id} is not exist in Redis!")
+        result: dict = await paginate_teams_logic(callback, paginate_dto)
+        send_message_for_search = result.get("send_message_for_search", None)
+        
+        # извлекаем из редиса
+        teams = await paginate_dto.get_cache_teams()
+    else:
+        teams = await paginate_dto.get_cache_teams()
+    
+    data_with_pagination = await Helpers.get_paginated_kb_teams(teams)
+    
+    if send_message_for_search:
+        await send_message_for_search.delete()
+    
+    # Очищаем состояние загрузки, но сохраняем sc_number
+    await state.clear()
+    await state.update_data(sc_number=sc_number)
+    
+    await callback.message.answer(
+        text="Выберите подразделение:",
+        reply_markup=data_with_pagination
+    )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("teams_page_"))
+@new_user_router.callback_query(StateFilter(LoadPagination.load), F.data.startswith("teams_page_"))
+async def show_teams_pagination_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    """
+    Обработчик кнопок постраничной навигации в отображении списка подразделений
+    """
+    user_id = callback.from_user.id
+    teams = None
+    send_message_for_search = None
+
+    # Получаем sc_number из состояния
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    if not sc_number:
+        await callback.answer("Ошибка: номер заявки не найден")
+        return
+
+    paginate_dto: PaginateTeamsDTO = PaginateTeamsDTO(user_id=user_id, sc_number=sc_number)
+
+    is_loading = state_data.get("load", None)
+    await callback.answer()
+
+    if is_loading:
+        return
+
+    send_message_for_search = None
+    
+    if not await paginate_dto.exists():
+        # Защищаем от повторного запроса
+        await state.set_state(LoadPagination.load)
+        await state.update_data(load=True)
+
+        logger.debug(f"key with name {callback.from_user.id} is not exist in Redis!")
+        result: dict = await paginate_teams_logic(callback, paginate_dto)
+        send_message_for_search = result.get("send_message_for_search", None)
+
+        # извлекаем из редиса
+        teams = await paginate_dto.get_cache_teams()
+    else:
+        teams = await paginate_dto.get_cache_teams()
+
+    data_with_pagination = await Helpers.get_paginated_kb_teams(teams, int(callback.data.split("teams_page_")[1]))
+
+    if send_message_for_search:
+        await send_message_for_search.delete()
+
+    # Очищаем состояние загрузки, но сохраняем sc_number
+    await state.clear()
+    await state.update_data(sc_number=sc_number)
+
+    await callback.message.edit_reply_markup(
+        reply_markup=data_with_pagination
+    )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("select_team$"))
+async def select_team_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик выбора подразделения
+    """
+    team_id = callback.data[12:]  # Убираем "select_team$"
+    user_id = callback.from_user.id
+    
+    # Получаем sc_number из состояния
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    if not sc_number:
+        await callback.answer("Ошибка: номер заявки не найден")
+        return
+    
+    # Сохраняем выбранное подразделение
+    await state.update_data(selected_team_id=team_id)
+    
+    # Получаем сотрудников выбранного подразделения
+    try:
+        response = await ItiliumBaseApi.get_responsibles(user_id, sc_number)
+        if response.status_code == 200:
+            responsibles_data = response.json()
+            
+            # Находим выбранное подразделение
+            selected_team = None
+            for team in responsibles_data:
+                if team['responsibleTeamId'] == team_id:
+                    selected_team = team
+                    break
+            
+            if selected_team:
+                employees = selected_team['responsibles']
+                data_with_pagination = await Helpers.get_paginated_kb_employees(employees)
+                
+                await callback.message.edit_text(
+                    text="Выберите ответственного:",
+                    reply_markup=data_with_pagination
+                )
+            else:
+                await callback.answer("Подразделение не найдено")
+        else:
+            await callback.answer("Ошибка получения данных")
+    except Exception as e:
+        logger.error(f"Error getting responsibles: {e}")
+        await callback.answer("Ошибка получения данных")
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("employees_page_"))
+async def show_employees_pagination_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    """
+    Обработчик кнопок постраничной навигации в отображении списка сотрудников
+    """
+    user_id = callback.from_user.id
+    
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    team_id = state_data.get('selected_team_id')
+    
+    if not sc_number or not team_id:
+        await callback.answer("Ошибка: данные не найдены")
+        return
+
+    await callback.answer()
+
+    try:
+        response = await ItiliumBaseApi.get_responsibles(user_id, sc_number)
+        if response.status_code == 200:
+            responsibles_data = response.json()
+            
+            # Находим выбранное подразделение
+            selected_team = None
+            for team in responsibles_data:
+                if team['responsibleTeamId'] == team_id:
+                    selected_team = team
+                    break
+            
+            if selected_team:
+                employees = selected_team['responsibles']
+                page = int(callback.data.split("employees_page_")[1])
+                data_with_pagination = await Helpers.get_paginated_kb_employees(employees, page)
+                
+                await callback.message.edit_reply_markup(
+                    reply_markup=data_with_pagination
+                )
+            else:
+                await callback.answer("Подразделение не найдено")
+        else:
+            await callback.answer("Ошибка получения данных")
+    except Exception as e:
+        logger.error(f"Error getting employees: {e}")
+        await callback.answer("Ошибка получения данных")
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("select_employee$"))
+async def select_employee_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик выбора сотрудника
+    """
+    employee_id = callback.data[16:]  # Убираем "select_employee$"
+    user_id = callback.from_user.id
+    
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    if not sc_number:
+        await callback.answer("Ошибка: номер заявки не найден")
+        return
+    
+    # Сохраняем выбранного сотрудника
+    await state.update_data(selected_employee_id=employee_id)
+    
+    await callback.answer()
+    
+    # Показываем подтверждение
+    btns = {
+        "Назад к подразделениям ⬅️": "back_to_teams",
+        "Назад к сотрудникам ⬅️": "back_to_employees",
+        "Отмена ❌": "cancel_change_responsible",
+        "Подтвердить ✅": f"confirm_change_responsible${employee_id}"
+    }
+    
+    btn_keyboard = get_callback_btns(btns=btns, size=(2,))
+    
+    await callback.message.edit_text(
+        text=f"Подтвердите смену ответственного для заявки №{sc_number}",
+        reply_markup=btn_keyboard
+    )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("confirm_change_responsible$"))
+async def confirm_change_responsible_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик подтверждения смены ответственного
+    """
+    employee_id = callback.data[28:]  # Убираем "confirm_change_responsible$"
+    user_id = callback.from_user.id
+    
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    if not sc_number:
+        await callback.answer("Ошибка: номер заявки не найден")
+        return
+    
+    await callback.answer()
+    
+    send_data_to_api = await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text="Меняю ответственного. Подождите!"
+    )
+    
+    try:
+        result: Response = await ItiliumBaseApi.change_responsible(
+            telegram_user_id=user_id,
+            sc_number=sc_number,
+            responsible_employee_id=employee_id
+        )
+        
+        if result.status_code == 200:
+            await send_data_to_api.delete()
+            
+            # Получаем информацию о назначенном сотруднике
+            try:
+                response = await ItiliumBaseApi.get_responsibles(user_id, sc_number)
+                if response.status_code == 200:
+                    responsibles_data = response.json()
+                    
+                    # Находим назначенного сотрудника
+                    assigned_employee = None
+                    for team in responsibles_data:
+                        for employee in team['responsibles']:
+                            if employee['responsibleEmployeeId'] == employee_id:
+                                assigned_employee = employee
+                                break
+                        if assigned_employee:
+                            break
+                    
+                    if assigned_employee:
+                        await callback.bot.send_message(
+                            chat_id=callback.from_user.id,
+                            text=f"✅ Для заявки №{sc_number} назначен новый ответственный: {assigned_employee['responsibleEmployeeTitle']}"
+                        )
+                    else:
+                        await callback.bot.send_message(
+                            chat_id=callback.from_user.id,
+                            text=f"✅ Для заявки №{sc_number} назначен новый ответственный"
+                        )
+                else:
+                    await callback.bot.send_message(
+                        chat_id=callback.from_user.id,
+                        text=f"✅ Для заявки №{sc_number} назначен новый ответственный"
+                    )
+            except Exception as e:
+                logger.error(f"Error getting employee info: {e}")
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=f"✅ Для заявки №{sc_number} назначен новый ответственный"
+                )
+        else:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=f"""
+                Что-то пошло не так... 💥
+                Ошибка: {result.text}
+                """
+            )
+    except Exception as e:
+        logger.error(f"Error changing responsible: {e}")
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text="Ошибка при смене ответственного"
+        )
+    
+    await state.clear()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("cancel_change_responsible"))
+async def cancel_change_responsible_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик отмены смены ответственного - возвращает к детальному просмотру заявки
+    """
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    await callback.answer()
+    await state.clear()
+    
+    if not sc_number:
+        await callback.message.edit_text("Отмена")
+        return
+    
+    # Получаем данные заявки
+    try:
+        response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
+        
+        if response is None:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text="Заявка не найдена"
+            )
+            return
+        
+        # Формируем текст сообщения
+        message_text = Helpers.prepare_sc(response)
+        
+        # Формируем кнопки
+        btns = {
+            "Скрыть информацию ↩️": "del_message",
+            "Поменять статус 🔁": f"show_state${sc_number}",
+        }
+        
+        # Добавляем кнопку смены ответственного если поле change_responsible равно true
+        if response.get("change_responsible") == True:
+            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
+        
+        btn_keyboard = get_callback_btns(btns=btns, size=(1,))
+        
+        await callback.message.edit_text(
+            text=message_text,
+            reply_markup=btn_keyboard,
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting SC details: {e}")
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text="Ошибка при получении данных заявки"
+        )
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_teams_pagination"))
+async def delete_teams_pagination_callback(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки удаления пагинации подразделений
+    """
+    await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("delete_employees_pagination"))
+async def delete_employees_pagination_callback(callback: types.CallbackQuery):
+    """
+    Обработчик кнопки удаления пагинации сотрудников
+    """
+    await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("assign_to_team"))
+async def assign_to_team_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик кнопки "Назначить на подразделение"
+    """
+    user_id = callback.from_user.id
+    
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    team_id = state_data.get('selected_team_id')
+    
+    if not sc_number or not team_id:
+        await callback.answer("Ошибка: данные не найдены")
+        return
+    
+    await callback.answer()
+    
+    # Показываем подтверждение для назначения на подразделение
+    btns = {
+        "Назад ⬅️": "back_to_employees",
+        "Отмена ❌": "cancel_change_responsible",
+        "Подтвердить ✅": f"confirm_assign_to_team${team_id}"
+    }
+    
+    btn_keyboard = get_callback_btns(btns=btns, size=(2,))
+    
+    await callback.message.edit_text(
+        text=f"Подтвердите назначение на подразделение для заявки №{sc_number}",
+        reply_markup=btn_keyboard
+    )
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("scs_client"))
@@ -962,6 +1432,178 @@ async def set_comment_for_confirm_sc_handler(
 
     data: dict = await state.get_data()
     logger.debug(data)
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("back_to_teams"))
+async def back_to_teams_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик кнопки "Назад к подразделениям" - возвращает к списку подразделений
+    """
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    if not sc_number:
+        await callback.answer("Ошибка: номер заявки не найден")
+        return
+    
+    await callback.answer()
+    
+    # Получаем подразделения из кэша
+    try:
+        paginate_dto: PaginateTeamsDTO = PaginateTeamsDTO(user_id=callback.from_user.id, sc_number=sc_number)
+        
+        if await paginate_dto.exists():
+            teams = await paginate_dto.get_cache_teams()
+            data_with_pagination = await Helpers.get_paginated_kb_teams(teams)
+            
+            await callback.message.edit_text(
+                text="Выберите подразделение:",
+                reply_markup=data_with_pagination
+            )
+        else:
+            await callback.answer("Данные не найдены. Попробуйте снова.")
+    except Exception as e:
+        logger.error(f"Error getting teams: {e}")
+        await callback.answer("Ошибка получения данных")
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("back_to_employees"))
+async def back_to_employees_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик кнопки "Назад к сотрудникам" - возвращает к списку сотрудников
+    """
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    team_id = state_data.get('selected_team_id')
+    
+    if not sc_number or not team_id:
+        await callback.answer("Ошибка: данные не найдены")
+        return
+    
+    await callback.answer()
+    
+    # Получаем сотрудников выбранного подразделения
+    try:
+        response = await ItiliumBaseApi.get_responsibles(callback.from_user.id, sc_number)
+        if response.status_code == 200:
+            responsibles_data = response.json()
+            
+            # Находим выбранное подразделение
+            selected_team = None
+            for team in responsibles_data:
+                if team['responsibleTeamId'] == team_id:
+                    selected_team = team
+                    break
+            
+            if selected_team:
+                employees = selected_team['responsibles']
+                data_with_pagination = await Helpers.get_paginated_kb_employees(employees)
+                
+                await callback.message.edit_text(
+                    text="Выберите ответственного:",
+                    reply_markup=data_with_pagination
+                )
+            else:
+                await callback.answer("Подразделение не найдено")
+        else:
+            await callback.answer("Ошибка получения данных")
+    except Exception as e:
+        logger.error(f"Error getting employees: {e}")
+        await callback.answer("Ошибка получения данных")
+
+
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("confirm_assign_to_team$"))
+async def confirm_assign_to_team_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext
+):
+    """
+    Обработчик подтверждения назначения на подразделение
+    """
+    team_id = callback.data[25:]  # Убираем "confirm_assign_to_team$"
+    user_id = callback.from_user.id
+    
+    state_data = await state.get_data()
+    sc_number = state_data.get('sc_number')
+    
+    if not sc_number:
+        await callback.answer("Ошибка: номер заявки не найден")
+        return
+    
+    await callback.answer()
+    
+    send_data_to_api = await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text="Назначаю на подразделение. Подождите!"
+    )
+    
+    try:
+        # Для назначения на подразделение используем team_id как responsibleEmployeeId
+        result: Response = await ItiliumBaseApi.change_responsible(
+            telegram_user_id=user_id,
+            sc_number=sc_number,
+            responsible_employee_id=team_id
+        )
+        
+        await send_data_to_api.delete()
+        
+        if result.status_code == 200:
+            # Получаем информацию о назначенном подразделении
+            try:
+                response = await ItiliumBaseApi.get_responsibles(user_id, sc_number)
+                if response.status_code == 200:
+                    responsibles_data = response.json()
+                    
+                    # Находим назначенное подразделение
+                    assigned_team = None
+                    for team in responsibles_data:
+                        if team['responsibleTeamId'] == team_id:
+                            assigned_team = team
+                            break
+                    
+                    if assigned_team:
+                        await callback.bot.send_message(
+                            chat_id=callback.from_user.id,
+                            text=f"✅ Для заявки №{sc_number} назначено подразделение: {assigned_team['responsibleTeamTitle']}"
+                        )
+                    else:
+                        await callback.bot.send_message(
+                            chat_id=callback.from_user.id,
+                            text=f"✅ Для заявки №{sc_number} назначено подразделение"
+                        )
+                else:
+                    await callback.bot.send_message(
+                        chat_id=callback.from_user.id,
+                        text=f"✅ Для заявки №{sc_number} назначено подразделение"
+                    )
+            except Exception as e:
+                logger.error(f"Error getting team info: {e}")
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=f"✅ Для заявки №{sc_number} назначено подразделение"
+                )
+        else:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=f"""
+                Что-то пошло не так... 💥
+                Ошибка: {result.text}
+                """
+            )
+    except Exception as e:
+        logger.error(f"Error assigning to team: {e}")
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text="Ошибка при назначении на подразделение"
+        )
+    
+    await state.clear()
 
 
 @new_user_router.callback_query()

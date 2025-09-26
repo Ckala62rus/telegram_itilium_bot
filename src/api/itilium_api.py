@@ -10,42 +10,9 @@ from httpx import Response
 from api.urls import ApiUrls
 from config.configuration import settings
 from utils.helpers import Helpers
+from utils.http_client import log_and_request
 
 logger = logging.getLogger(__name__)
-
-
-class AsyncHttpClient:
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._client = None
-        return cls._instance
-
-    async def get_client(self):
-        if self._client is None:
-            try:
-                self._client = httpx.AsyncClient(
-                    auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD),
-                    timeout=30.0,
-                    limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
-                )
-                logger.info("HTTP client initialized successfully.")
-            except Exception as e:
-                logger.error(f'❌ Ошибка инициализации HTTP клиента: {e}')
-                raise
-        return self._client
-
-    async def close(self):
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-            logger.info("HTTP client closed.")
-
-
-# Экземпляр singleton-клиента
-async_http_client = AsyncHttpClient()
 
 
 class ItiliumBaseApi:
@@ -137,13 +104,14 @@ class ItiliumBaseApi:
         logger.debug(f"send_request data {data}")
 
         try:
-            client = await async_http_client.get_client()
-            return await client.request(
+            response = await log_and_request(
                 method=method,
                 url=settings.ITILIUM_URL + url,
                 data=data,
-                params=params
+                params=params,
+                auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
             )
+            return response
         except Exception as e:
             logger.debug(f"error for {method} {url} {data}")
             logger.exception(e)
@@ -177,11 +145,14 @@ class ItiliumBaseApi:
     @staticmethod
     async def find_sc_by_id(telegram_user_id: int, sc_number: str) -> Response | None:
         try:
-            client = await async_http_client.get_client()
-            resp = await client.post(settings.ITILIUM_URL + ApiUrls.FIND_SC.format(
-                telegram_user_id=telegram_user_id,
-                sc_number=sc_number
-            ))
+            resp = await log_and_request(
+                method="POST",
+                url=settings.ITILIUM_URL + ApiUrls.FIND_SC.format(
+                    telegram_user_id=telegram_user_id,
+                    sc_number=sc_number
+                ),
+                auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
+            )
 
             logger.debug(f"response code: {resp.status_code} | response text: {resp.text}")
 
@@ -288,6 +259,38 @@ class ItiliumBaseApi:
             new_state=state,
             date_inc=date_inc,
             comment=comment,
+        )
+
+        return await (ItiliumBaseApi.send_request("POST", url, None))
+
+    @staticmethod
+    async def get_responsibles(
+            telegram_user_id: int,
+            sc_number: str
+    ) -> Response:
+        """
+        Метод для получения списка ответственных для заявки
+        """
+        url = ApiUrls.GET_RESPONSIBLES.format(
+            telegram_user_id=telegram_user_id,
+            sc_number=sc_number
+        )
+
+        return await (ItiliumBaseApi.send_request("POST", url, None))
+
+    @staticmethod
+    async def change_responsible(
+            telegram_user_id: int,
+            sc_number: str,
+            responsible_employee_id: str
+    ) -> Response:
+        """
+        Метод для смены ответственного за заявку
+        """
+        url = ApiUrls.CHANGE_RESPONSIBLE.format(
+            telegram_user_id=telegram_user_id,
+            inc_number=sc_number,
+            responsible_employee_id=responsible_employee_id
         )
 
         return await (ItiliumBaseApi.send_request("POST", url, None))

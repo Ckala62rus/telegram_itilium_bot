@@ -24,6 +24,8 @@ class ApiUrls:
                                          "&date_inc={date_inc}"
                                          "&comment={comment}"
                                          )
+    GET_RESPONSIBLES: str = "responsibles_sc?telegram={telegram_user_id}&sc_number={sc_number}"
+    CHANGE_RESPONSIBLE: str = "change_responsible_sc?telegram={telegram_user_id}&inc_number={inc_number}&responsibleEmployeeId={responsible_employee_id}"
 
 
 apiUrls = ApiUrls()

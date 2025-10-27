@@ -193,7 +193,7 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
                 text="Выберите тип заявки:",
                 reply_markup=get_callback_btns(
                     btns={
-                        "Создать обычную заявку": "create_regular_issue",
+                        "Заявка в отдел ИТ": "create_regular_issue",
                         "Заявка в отдел маркетинга": "create_marketing_issue",
                         "❌ Отмена": "cancel_marketing"
                     },
@@ -213,6 +213,9 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
             
     except Exception as e:
         await loading_msg.delete()
+        
+        # Сбрасываем FSM состояние при ошибке
+        await state.clear()
         
         # Проверяем тип ошибки для более понятного сообщения
         if "ConnectError" in str(type(e)) or "Try again" in str(e):
@@ -259,8 +262,21 @@ async def confirm_crate_new_issue_command(
 
     logger.debug(f"FSM State: {data}")
     logger.debug(f"get user information from itilium by telegram id {message.from_user.id}")
-    user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
-
+    
+    try:
+        user_data_from_itilium: dict | None = await ItiliumBaseApi.get_employee_data_by_identifier(message)
+    except Exception as e:
+        logger.error(f"Error getting user data: {e}")
+        await state.clear()
+        await message.answer(
+            text="❌ **Ошибка подключения к серверу**\n\n"
+                 "Не удается подключиться к системе Итилиум. "
+                 "Попробуйте создать заявку еще раз через несколько минут.\n\n"
+                 "Если проблема повторяется, обратитесь к администратору.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        return
+    
     if user_data_from_itilium is None:
         logger.debug("user not found in Itilium")
         await state.clear()
@@ -2071,7 +2087,7 @@ async def back_to_request_type_callback(callback: types.CallbackQuery, state: FS
         text="Выберите тип заявки:",
         reply_markup=get_callback_btns(
             btns={
-                "Создать обычную заявку": "create_regular_issue",
+                "Заявка в отдел ИТ": "create_regular_issue",
                 "Заявка в отдел маркетинга": "create_marketing_issue",
                 "❌ Отмена": "cancel_marketing"
             },

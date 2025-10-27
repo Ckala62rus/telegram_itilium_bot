@@ -48,6 +48,7 @@ class HTTPClientManager:
         client = AsyncClient(
             timeout=timeout,
             limits=limits,
+            verify=False,  # Отключаем проверку SSL сертификата
             headers={
                 "User-Agent": "TelegramBot/1.0",
                 "Accept": "application/json",
@@ -56,6 +57,7 @@ class HTTPClientManager:
         )
         
         logger.info("HTTP клиент создан с оптимизированными настройками")
+        logger.warning("⚠️ SSL проверка отключена для работы с API Итилиума")
         return client
     
     async def close(self):

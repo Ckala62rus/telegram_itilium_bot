@@ -68,7 +68,32 @@ async def on_date_selected(
     ctx.dialog_data.update(new_date=str(selected_date))
 
     await callback.answer()
-    await manager.switch_to(ChangeScStatus.confirm)
+    
+    # Проверяем, если это маркетинговая заявка
+    start_data = manager.start_data
+    if start_data.get("marketing_request"):
+        # Для маркетинговых заявок сохраняем дату в dialog_data и завершаем диалог
+        ctx = manager.current_context()
+        ctx.dialog_data.update(selected_date=selected_date)
+        
+        # Завершаем диалог
+        await manager.done()
+        
+        # Отправляем callback для обработки завершения с датой в callback data
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        date_str = selected_date.strftime('%Y-%m-%d')
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Дата выбрана", callback_data=f"marketing_calendar_done_{date_str}")],
+            [InlineKeyboardButton(text="🔙 Выбрать другую дату", callback_data="choose_date_calendar")],
+            [InlineKeyboardButton(text="🔙 К подразделениям", callback_data="back_to_subdivisions_from_date")]
+        ])
+        await callback.message.edit_text(
+            f"📅 Выбрана дата: {selected_date.strftime('%d.%m.%Y')}\n\nВыберите действие:",
+            reply_markup=keyboard
+        )
+    else:
+        # Для обычных заявок переходим к подтверждению
+        await manager.switch_to(ChangeScStatus.confirm)
 
 
 async def on_date_selected_second(

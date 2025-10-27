@@ -294,3 +294,68 @@ class ItiliumBaseApi:
         )
 
         return await (ItiliumBaseApi.send_request("POST", url, None))
+
+    @staticmethod
+    async def get_marketing_services(telegram_id: int) -> list | None:
+        """
+        Получение списка сервисов маркетинга
+        :param telegram_id: ID пользователя в Telegram
+        :return: список сервисов или None
+        """
+        try:
+            url = f"{settings.ITILIUM_URL}/listServicesMarketing"
+            params = {"telegram": telegram_id}
+            
+            response = await log_and_request(
+                method="GET",
+                url=url,
+                params=params,
+                auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"Marketing services: {data}")
+                return data
+            else:
+                logger.error(f"Failed to get marketing services: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting marketing services: {e}")
+            return None
+
+    @staticmethod
+    async def get_marketing_subdivisions(telegram_id: int) -> list | None:
+        """
+        Получение списка подразделений для маркетинга
+        :param telegram_id: ID пользователя в Telegram
+        :return: список подразделений или None
+        """
+        try:
+            url = f"{settings.ITILIUM_URL}/listSubdivisionMarketing"
+            params = {"telegram": telegram_id}
+            logger.info(f"Requesting marketing subdivisions for user {telegram_id}")
+            logger.info(f"URL: {url}")
+            logger.info(f"Params: {params}")
+            
+            response = await log_and_request(
+                method="GET",
+                url=url,
+                params=params,
+                auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
+            )
+            
+            logger.info(f"Response status: {response.status_code}")
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Marketing subdivisions received: {len(data) if data else 0} items")
+                logger.debug(f"Marketing subdivisions data: {data}")
+                return data
+            else:
+                logger.error(f"Failed to get marketing subdivisions: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting marketing subdivisions: {e}")
+            return None

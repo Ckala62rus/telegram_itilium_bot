@@ -6,17 +6,20 @@ import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram_dialog import DialogManager
+from aiogram_dialog import DialogManager, StartMode
 from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
 from bot_enums.user_enums import UserButtonText
 from dialogs.bot_menu.states import ChangeScStatus
+from dialogs.bot_menu.calendar_states import CalendarDialog
 from dto.paginate_scs_dto import PaginateScsDTO
 from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
 from dto.paginate_teams_dto import PaginateTeamsDTO
+from dto.paginate_marketing_subdivisions_dto import PaginateMarketingSubdivisionsDTO
 from filters.chat_types import ChatTypeFilter
 from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc, LoadPaginationResponsible
+from fsm.marketing_fsm import MarketingRequest
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
 from kbds.user_kbds import USER_MENU_KEYBOARD
@@ -28,6 +31,94 @@ new_user_router = Router()
 new_user_router.message.filter(ChatTypeFilter(['private']))
 
 logger = logging.getLogger(__name__)
+
+
+# МАРКЕТИНГОВЫЕ ОБРАБОТЧИКИ - ВЫСОЧАЙШИЙ ПРИОРИТЕТ
+@new_user_router.message(MarketingRequest.UPLOAD_FILES)
+async def handle_marketing_file_upload(message: types.Message, state: FSMContext, bot: Bot):
+    """Обработка загрузки файлов для дизайна - ВЫСОЧАЙШИЙ ПРИОРИТЕТ"""
+    # Строгая проверка состояния
+    current_state = await state.get_state()
+    if current_state != MarketingRequest.UPLOAD_FILES:
+        logger.info(f"Not in UPLOAD_FILES state, current: {current_state}, ignoring")
+        return
+        
+    logger.info(f"Marketing file upload handler triggered for user {message.from_user.id}")
+    logger.info(f"Message type: photo={message.photo}, video={message.video}, document={message.document}, voice={message.voice}")
+    try:
+        # Проверяем, что это файл
+        if not (message.photo or message.video or message.document or message.voice):
+            logger.info(f"Not a file message, ignoring")
+            return
+            
+        # Получаем информацию о файле
+        logger.info(f"Getting file info for user {message.from_user.id}")
+        file_path = await Helpers.get_file_info(message, bot)
+        logger.info(f"File path received: {file_path}")
+        
+        # Получаем оригинальное имя файла
+        original_filename = "Неизвестный файл"
+        if message.document:
+            original_filename = message.document.file_name or "Документ"
+        elif message.photo:
+            original_filename = f"Фото_{len(message.photo)}"
+        elif message.video:
+            original_filename = message.video.file_name or "Видео"
+        elif message.voice:
+            original_filename = "Голосовое сообщение"
+        
+        # Получаем текущий список файлов
+        data = await state.get_data()
+        files = data.get("uploaded_files", [])
+        file_names = data.get("uploaded_file_names", [])
+        
+        # Добавляем новый файл и его имя
+        files.append(file_path)
+        file_names.append(original_filename)
+        
+        # Сохраняем обновленный список
+        await state.update_data(uploaded_files=files, uploaded_file_names=file_names)
+        
+        # Получаем ID предыдущего сообщения с кнопками (если есть)
+        data = await state.get_data()
+        old_message_id = data.get("file_upload_message_id")
+        
+        # Удаляем старое сообщение с кнопками, если оно есть
+        if old_message_id:
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=old_message_id)
+                logger.info(f"Deleted old file upload message {old_message_id}")
+            except Exception as e:
+                logger.warning(f"Could not delete old message {old_message_id}: {e}")
+        
+        # Отправляем одно объединенное сообщение с обновленной информацией и кнопками
+        sent_message = await message.answer(
+            text=f"📁 **Загрузка файлов для дизайна**\n\n"
+                 f"✅ Файл успешно добавлен! Загружено файлов: {len(files)}\n\n"
+                 "Если хотите добавить еще файлы, можете продолжить загрузку.\n"
+                 "Или нажмите 'Далее' для перехода к следующему шагу.",
+            reply_markup=get_callback_btns(
+                btns={
+                    "🔙 Назад к меню": "back_to_files",
+                    "❌ Отмена": "cancel_marketing"
+                },
+                size=(1, 1)
+            )
+        )
+        
+        # Сохраняем ID нового сообщения для возможного удаления в будущем
+        await state.update_data(file_upload_message_id=sent_message.message_id)
+        
+        # Обновляем данные в FSM для корректного отображения в других обработчиках
+        await state.update_data(uploaded_files=files)
+        
+    except Exception as e:
+        logger.error(f"Error handling file upload: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        await message.answer("❌ Ошибка при загрузке файла. Попробуйте еще раз.")
 
 
 @new_user_router.message(CommandStart())
@@ -81,20 +172,79 @@ async def handler_menu_command(
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("crate_new_issue"))
 async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMContext):
     """
-    Метод инициирует создание нового обращения с FSM состоянием.
-    (Обращение создается как с текстом, так и файлами, которые можно приложить к описанию)
+    Метод инициирует создание нового обращения с проверкой прав на маркетинговые заявки.
     """
-    logger.debug("Perform callback command create_new_issue and get cancel button")
+    logger.debug("Perform callback command create_new_issue")
     await callback.answer()
-
-    await callback.message.answer(
-        text=MessageTemplates.ENTER_ISSUE_DESCRIPTION,
-        reply_markup=get_keyboard(str(UserButtonText.CANCEL))
-    )
-
-    await state.set_state(CreateNewIssue.description)
-    await state.update_data(description="")
-    await state.update_data(files=[])
+    
+    # Показываем индикатор загрузки
+    loading_msg = await callback.message.answer("🔄 Загружаю... подождите")
+    
+    try:
+        # Получаем данные пользователя для проверки прав
+        user_data = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+        
+        # Удаляем индикатор загрузки
+        await loading_msg.delete()
+        
+        if user_data and user_data.get('canCreateMarketingRequests', False):
+            # Пользователь может создавать маркетинговые заявки
+            await callback.message.answer(
+                text="Выберите тип заявки:",
+                reply_markup=get_callback_btns(
+                    btns={
+                        "Создать обычную заявку": "create_regular_issue",
+                        "Заявка в отдел маркетинга": "create_marketing_issue",
+                        "❌ Отмена": "cancel_marketing"
+                    },
+                    size=(1, 1, 1)
+                )
+            )
+            await state.set_state(MarketingRequest.CHOOSE_REQUEST_TYPE)
+        else:
+            # Обычная логика создания заявки
+            await callback.message.answer(
+                text=MessageTemplates.ENTER_ISSUE_DESCRIPTION,
+                reply_markup=get_keyboard(str(UserButtonText.CANCEL))
+            )
+            await state.set_state(CreateNewIssue.description)
+            await state.update_data(description="")
+            await state.update_data(files=[])
+            
+    except Exception as e:
+        await loading_msg.delete()
+        
+        # Проверяем тип ошибки для более понятного сообщения
+        if "ConnectError" in str(type(e)) or "Try again" in str(e):
+            await callback.message.answer(
+                "❌ **Ошибка подключения к серверу**\n\n"
+                "Не удается подключиться к системе Итилиум. "
+                "Попробуйте создать заявку еще раз через несколько минут.\n\n"
+                "Если проблема повторяется, обратитесь к администратору.",
+                reply_markup=get_callback_btns(
+                    btns={
+                        "🔄 Попробовать снова": "crate_new_issue",
+                        "❌ Отмена": "cancel_marketing"
+                    },
+                    size=(1, 1)
+                )
+            )
+        else:
+            await callback.message.answer(
+                "❌ **Произошла ошибка**\n\n"
+                "Не удалось загрузить данные пользователя. "
+                "Попробуйте создать заявку еще раз.",
+                reply_markup=get_callback_btns(
+                    btns={
+                        "🔄 Попробовать снова": "crate_new_issue",
+                        "❌ Отмена": "cancel_marketing"
+                    },
+                    size=(1, 1)
+                )
+            )
+        
+        await state.clear()
+        logger.error(f"Error loading user data: {e}")
 
 
 @new_user_router.message(
@@ -160,6 +310,10 @@ async def set_description_for_issue(
     """
     Метод позволяющий создать текст для нового обращения
     """
+    # Исключаем маркетинговые заявки
+    if await state.get_state() == MarketingRequest.UPLOAD_FILES:
+        return
+        
     logger.debug("enter description for new issue")
 
     if message.text and len(message.text) > 0:
@@ -218,6 +372,10 @@ async def set_description_for_issue(
     """
     Метод для добавления различных файлов к обращению
     """
+    # Исключаем маркетинговые заявки
+    if await state.get_state() == MarketingRequest.UPLOAD_FILES:
+        return
+    
     data = await state.get_data()
 
     if (
@@ -368,6 +526,12 @@ async def test_filter(
     """
     Обработчик отвечающий за получение названий файлов и подготовку ссылок, через которые Итилиум их скачает.
     """
+    # Исключаем маркетинговые заявки
+    current_state = await state.get_state()
+    if current_state == MarketingRequest.UPLOAD_FILES:
+        logger.info(f"Excluding marketing file upload from test_filter, state: {current_state}")
+        return
+    
     data = await state.get_data()
 
     if (
@@ -1603,6 +1767,911 @@ async def confirm_assign_to_team_callback(
             text="Ошибка при назначении на подразделение"
         )
     
+    await state.clear()
+
+
+
+
+@new_user_router.message(Command("calendar"))
+@new_user_router.message(F.text == "📅 Календарь")
+async def start_calendar_dialog(message: types.Message, dialog_manager: DialogManager):
+    """Запуск диалога с календарем"""
+    await dialog_manager.start(CalendarDialog.MAIN, mode=StartMode.RESET_STACK)
+
+
+@new_user_router.callback_query(F.data == "calendar")
+async def calendar_callback(callback: types.CallbackQuery, dialog_manager: DialogManager):
+    """Обработчик callback кнопки календаря"""
+    await callback.answer()
+    await dialog_manager.start(CalendarDialog.MAIN, mode=StartMode.RESET_STACK)
+
+
+# ========== ОБРАБОТЧИКИ МАРКЕТИНГОВЫХ ЗАЯВОК ==========
+
+@new_user_router.callback_query(F.data == "create_regular_issue")
+async def create_regular_issue_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Переход к созданию обычной заявки"""
+    await callback.answer()
+    await callback.message.answer(
+        text=MessageTemplates.ENTER_ISSUE_DESCRIPTION,
+        reply_markup=get_keyboard(str(UserButtonText.CANCEL))
+    )
+    await state.set_state(CreateNewIssue.description)
+    await state.update_data(description="")
+    await state.update_data(files=[])
+
+
+@new_user_router.callback_query(F.data == "create_marketing_issue")
+async def start_marketing_request_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Начало создания маркетинговой заявки"""
+    await callback.answer()
+    logger.info(f"Starting marketing request for user {callback.from_user.id}")
+    
+    # Показываем индикатор загрузки
+    loading_msg = await callback.message.answer("🔄 Загружаю... подождите")
+    
+    try:
+        # Получаем список сервисов
+        services = await ItiliumBaseApi.get_marketing_services(callback.from_user.id)
+        logger.info(f"Received {len(services) if services else 0} marketing services")
+        
+        if not services:
+            await loading_msg.delete()
+            await callback.message.answer("Ошибка получения списка сервисов. Попробуйте позже.")
+            await state.clear()
+            return
+            
+    except Exception as e:
+        logger.error(f"Error getting marketing services: {e}")
+        await loading_msg.delete()
+        await callback.message.answer(
+            "❌ Ошибка подключения к серверу. Попробуйте еще раз.",
+            reply_markup=get_callback_btns(
+                btns={"🔄 Попробовать снова": "create_marketing_issue", "❌ Отмена": "cancel_marketing"},
+                size=(1, 1)
+            )
+        )
+        await state.clear()
+        return
+    
+    # Удаляем индикатор загрузки
+    await loading_msg.delete()
+    
+    # Создаем inline кнопки для сервисов с эмодзи
+    service_emojis = {
+        "Дизайн": "🎨",
+        "Мероприятие": "🎉", 
+        "Реклама": "📢",
+        "SMM": "📱",
+        "Акция": "🏷️",
+        "Иное": "📋"
+    }
+    
+    service_buttons = {}
+    for service in services:
+        service_name = service["КомпонентаУслуги"]
+        emoji = service_emojis.get(service_name, "📋")
+        service_buttons[f"{emoji} {service_name}"] = f"select_service_{service_name}"
+    service_buttons["🔙 Назад"] = "back_to_request_type"
+    service_buttons["❌ Отмена"] = "cancel_marketing"
+    
+    logger.info(f"Sending service selection message with {len(service_buttons)} buttons")
+    await callback.message.answer(
+        text="Выберите сервис маркетинга:",
+        reply_markup=get_callback_btns(btns=service_buttons, size=(1,))
+    )
+    
+    # Сохраняем сервисы в состоянии и ID сообщения
+    await state.update_data(services=services, current_message_id=callback.message.message_id)
+    await state.set_state(MarketingRequest.CHOOSE_SERVICE)
+    logger.info(f"Marketing request state set to CHOOSE_SERVICE")
+
+
+@new_user_router.callback_query(F.data.startswith("select_service_"))
+async def choose_service_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка выбора сервиса"""
+    await callback.answer()
+    
+    # Извлекаем название сервиса из callback data
+    service_name = callback.data.replace("select_service_", "")
+    
+    data = await state.get_data()
+    services = data.get("services", [])
+    
+    # Находим выбранный сервис
+    selected_service = None
+    for service in services:
+        if service["КомпонентаУслуги"] == service_name:
+            selected_service = service
+            break
+    
+    if not selected_service:
+        await callback.message.answer("Сервис не найден. Попробуйте еще раз.")
+        return
+    
+    # Сохраняем выбранный сервис
+    await state.update_data(selected_service=selected_service)
+    
+    # Показываем индикатор загрузки
+    loading_msg = await callback.message.answer("🔄 Загружаю подразделения... подождите")
+    
+    try:
+        # Получаем список подразделений
+        logger.info(f"Loading subdivisions for user {callback.from_user.id}")
+        subdivisions = await ItiliumBaseApi.get_marketing_subdivisions(callback.from_user.id)
+        logger.info(f"Received subdivisions: {subdivisions}")
+        
+        if not subdivisions:
+            await loading_msg.delete()
+            logger.error(f"No subdivisions received for user {callback.from_user.id}")
+            await callback.message.answer("Ошибка получения списка подразделений. Попробуйте позже.")
+            await state.clear()
+            return
+        
+        # Удаляем индикатор загрузки
+        await loading_msg.delete()
+        
+        # Создаем DTO для пагинации
+        paginate_dto = PaginateMarketingSubdivisionsDTO(user_id=callback.from_user.id)
+        await paginate_dto.set_cache_subdivisions(subdivisions)
+        
+        # Создаем пагинированную клавиатуру
+        paginated_keyboard = await Helpers.get_paginated_kb_marketing_subdivisions(subdivisions, page=0)
+        
+        # Редактируем существующее сообщение вместо создания нового
+        await callback.message.edit_text(
+            text="Выберите подразделение:",
+            reply_markup=paginated_keyboard
+        )
+        
+        # Сохраняем подразделения в состоянии
+        await state.update_data(subdivisions=subdivisions)
+        await state.set_state(MarketingRequest.CHOOSE_SUBDIVISION)
+        
+    except Exception as e:
+        await loading_msg.delete()
+        await callback.message.answer("Произошла ошибка при загрузке подразделений. Попробуйте позже.")
+        await state.clear()
+        logger.error(f"Error loading marketing subdivisions: {e}")
+
+
+@new_user_router.callback_query(F.data.startswith("subdivisions_page_"))
+async def subdivisions_pagination_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик пагинации подразделений"""
+    await callback.answer()
+    
+    data = await state.get_data()
+    subdivisions = data.get("subdivisions", [])
+    
+    if not subdivisions:
+        await callback.message.answer("Список подразделений не найден. Попробуйте еще раз.")
+        return
+    
+    # Извлекаем номер страницы
+    try:
+        page = int(callback.data.replace("subdivisions_page_", ""))
+    except ValueError:
+        await callback.message.answer("Ошибка пагинации. Попробуйте еще раз.")
+        return
+    
+    # Создаем пагинированную клавиатуру
+    paginated_keyboard = await Helpers.get_paginated_kb_marketing_subdivisions(subdivisions, page=page)
+    
+    await callback.message.edit_reply_markup(reply_markup=paginated_keyboard)
+
+
+@new_user_router.callback_query(F.data.startswith("select_sub_"))
+async def choose_subdivision_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка выбора подразделения"""
+    await callback.answer()
+    
+    # Извлекаем индекс подразделения из callback data
+    try:
+        subdivision_index = int(callback.data.replace("select_sub_", ""))
+    except ValueError:
+        await callback.message.answer("Ошибка выбора подразделения. Попробуйте еще раз.")
+        return
+    
+    data = await state.get_data()
+    subdivisions = data.get("subdivisions", [])
+    
+    # Проверяем, что индекс валидный
+    if subdivision_index >= len(subdivisions):
+        await callback.message.answer("Подразделение не найдено. Попробуйте еще раз.")
+        return
+    
+    # Получаем название подразделения по индексу
+    subdivision_name = subdivisions[subdivision_index]
+    
+    # Сохраняем выбранное подразделение (это строка)
+    await state.update_data(selected_subdivision=subdivision_name)
+    
+    # Переходим к выбору даты исполнения через календарь
+    await callback.message.edit_text(
+        text="📅 **Дата исполнения (обязательное поле)**\n\nВыберите дату из календаря:",
+        reply_markup=get_callback_btns(
+            btns={
+                "📅 Выбрать дату": "choose_date_calendar",
+                "🔙 Назад": "back_to_subdivisions",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1, 1)
+        )
+    )
+    await state.set_state(MarketingRequest.CHOOSE_EXECUTION_DATE)
+
+
+
+
+
+
+
+
+@new_user_router.callback_query(F.data == "choose_date_calendar")
+async def choose_date_with_calendar_callback(callback: types.CallbackQuery, dialog_manager: DialogManager, state: FSMContext):
+    """Запуск календаря для выбора даты"""
+    await callback.answer()
+    try:
+        from dialogs.bot_menu.states import ChangeScStatus
+        
+        # Запускаем календарь для маркетинговых заявок
+        from dialogs.bot_menu.states import MarketingCalendar
+        await dialog_manager.start(
+            state=MarketingCalendar.select_date,
+            data={
+                "marketing_request": True,
+                "user_id": callback.from_user.id,
+                "callback_message_id": callback.message.message_id
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting calendar: {e}")
+        await callback.message.edit_text("Ошибка запуска календаря. Попробуйте еще раз.")
+
+
+# Обработчик для завершения календаря в контексте маркетинговых заявок
+@new_user_router.callback_query(F.data.startswith("marketing_calendar_done_"))
+async def handle_marketing_calendar_done(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка завершения календаря для маркетинговых заявок"""
+    await callback.answer()
+    
+    # Извлекаем дату из callback data
+    date_str = callback.data.replace("marketing_calendar_done_", "")
+    try:
+        from datetime import datetime
+        selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        await callback.message.edit_text("Ошибка формата даты. Попробуйте еще раз.")
+        return
+    
+    # Проверяем, что дата не в прошлом
+    from datetime import date
+    today = date.today()
+    if selected_date < today:
+        await callback.message.edit_text("❌ Дата не может быть в прошлом. Выберите другую дату.")
+        return
+    
+    # Сохраняем дату в FSM
+    await state.update_data(execution_date=selected_date)
+    
+    # Обновляем сообщение и переходим к форме
+    await callback.message.edit_text(f"✅ Дата исполнения: {selected_date.strftime('%d.%m.%Y')}")
+    await proceed_to_form(callback, state)
+
+
+
+
+# Обработчики кнопок "Назад"
+@new_user_router.callback_query(F.data == "back_to_request_type")
+async def back_to_request_type_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат к выбору типа заявки"""
+    await callback.answer()
+    await callback.message.edit_text(
+        text="Выберите тип заявки:",
+        reply_markup=get_callback_btns(
+            btns={
+                "Создать обычную заявку": "create_regular_issue",
+                "Заявка в отдел маркетинга": "create_marketing_issue",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1, 1)
+        )
+    )
+    await state.set_state(MarketingRequest.CHOOSE_REQUEST_TYPE)
+
+
+@new_user_router.callback_query(F.data == "back_to_services")
+async def back_to_services_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат к выбору сервиса"""
+    await callback.answer()
+    
+    data = await state.get_data()
+    services = data.get("services", [])
+    
+    if not services:
+        await callback.message.answer("Ошибка: данные сервисов не найдены. Попробуйте еще раз.")
+        await state.clear()
+        return
+    
+    # Создаем inline кнопки для сервисов с эмодзи
+    service_emojis = {
+        "Дизайн": "🎨",
+        "Мероприятие": "🎉", 
+        "Реклама": "📢",
+        "SMM": "📱",
+        "Акция": "🏷️",
+        "Иное": "📋"
+    }
+    
+    service_buttons = {}
+    for service in services:
+        service_name = service["КомпонентаУслуги"]
+        emoji = service_emojis.get(service_name, "📋")
+        service_buttons[f"{emoji} {service_name}"] = f"select_service_{service_name}"
+    service_buttons["🔙 Назад"] = "back_to_request_type"
+    service_buttons["❌ Отмена"] = "cancel_marketing"
+    
+    await callback.message.edit_text(
+        text="Выберите сервис маркетинга:",
+        reply_markup=get_callback_btns(btns=service_buttons, size=(1,))
+    )
+    await state.set_state(MarketingRequest.CHOOSE_SERVICE)
+
+
+@new_user_router.callback_query(F.data == "back_to_subdivisions")
+async def back_to_subdivisions_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат к выбору подразделения"""
+    await callback.answer()
+    
+    data = await state.get_data()
+    subdivisions = data.get("subdivisions", [])
+    
+    if not subdivisions:
+        await callback.message.answer("Ошибка: данные подразделений не найдены. Попробуйте еще раз.")
+        await state.clear()
+        return
+    
+    # Создаем пагинированную клавиатуру
+    paginated_keyboard = await Helpers.get_paginated_kb_marketing_subdivisions(subdivisions, page=0)
+    
+    await callback.message.edit_text(
+        text="Выберите подразделение:",
+        reply_markup=paginated_keyboard
+    )
+    await state.set_state(MarketingRequest.CHOOSE_SUBDIVISION)
+
+
+
+
+
+
+@new_user_router.callback_query(F.data == "cancel_marketing")
+async def cancel_marketing_request_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await callback.answer()
+    await callback.message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+async def proceed_to_form(callback_or_message, state: FSMContext):
+    """Переход к заполнению формы в зависимости от номера формы"""
+    data = await state.get_data()
+    selected_service = data.get("selected_service", {})
+    form_number = selected_service.get("НомерФормы", 3)
+    
+    logger.info(f"proceed_to_form: selected_service = {selected_service}")
+    logger.info(f"proceed_to_form: form_number = {form_number}")
+    
+    # Определяем, что у нас - callback или message
+    if hasattr(callback_or_message, 'message'):
+        # Это callback
+        message = callback_or_message.message
+    else:
+        # Это message
+        message = callback_or_message
+    
+    logger.info(f"proceed_to_form: Processing form_number = {form_number}")
+    
+    if form_number == 1:
+        logger.info("proceed_to_form: Entering form 1 (Design) logic")
+        # Форма для дизайна - сначала заполняем форму, потом файлы
+        await message.edit_text(
+            text="📝 **Заполните форму для дизайна**\n\n"
+                 "Введите название макета (баннер, афиша):",
+            reply_markup=get_callback_btns(
+                btns={"❌ Отмена": "cancel_marketing"},
+                size=(1,)
+            )
+        )
+        await state.set_state(MarketingRequest.FILL_FORM_1)
+    elif form_number == 2:
+        # Форма для мероприятия
+        await message.edit_text(
+            text="📝 **Заполните форму для мероприятия**\n\n"
+                 "Введите тему мероприятия:",
+            reply_markup=get_callback_btns(
+                btns={"❌ Отмена": "cancel_marketing"},
+                size=(1,)
+            )
+        )
+        await state.set_state(MarketingRequest.FILL_FORM_2)
+    else:
+        # Форма для рекламы, SMM, акций, иного
+        await message.edit_text(
+            text="📝 **Заполните форму**\n\n"
+                 "Введите описание заявки:",
+            reply_markup=get_callback_btns(
+                btns={"❌ Отмена": "cancel_marketing"},
+                size=(1,)
+            )
+        )
+        await state.set_state(MarketingRequest.FILL_FORM_3)
+
+
+
+
+@new_user_router.callback_query(F.data == "add_file")
+async def add_file_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка кнопки 'Добавить файл'"""
+    await callback.answer()
+    data = await state.get_data()
+    files = data.get("uploaded_files", [])
+    
+    logger.info(f"Add file callback - current files count: {len(files)}")
+    
+    await callback.message.edit_text(
+        text=f"📁 **Добавление файла**\n\n"
+             f"✅ Загружено файлов: {len(files)}\n\n"
+             "Прикрепите файл к сообщению (фото, документ, видео, голосовое сообщение):\n"
+             "• Можно прикрепить несколько файлов\n"
+             "• Поддерживаются: фото, документы, видео",
+        reply_markup=get_callback_btns(
+            btns={
+                "🔙 Назад к меню": "back_to_files",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1)
+        )
+    )
+    
+    # Сохраняем ID сообщения для возможного удаления
+    await state.update_data(file_upload_message_id=callback.message.message_id)
+
+
+@new_user_router.callback_query(F.data == "clear_files")
+async def clear_files_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка кнопки 'Удалить файлы'"""
+    await callback.answer()
+    await state.update_data(uploaded_files=[])
+    await callback.message.edit_text(
+        text="📁 **Загрузка файлов для дизайна**\n\n"
+             "✅ Файлы удалены\n\n"
+             "Прикрепите файлы макета (изображения, документы):\n"
+             "• Можно прикрепить несколько файлов\n"
+             "• Поддерживаются: фото, документы, видео\n\n"
+             "После загрузки файлов нажмите 'Далее'",
+        reply_markup=get_callback_btns(
+            btns={
+                "📁 Добавить файл": "add_file",
+                "➡️ Далее": "proceed_to_preview",
+                "🔙 Назад": "back_to_date_selection",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1, 1, 1)
+        )
+    )
+
+
+@new_user_router.callback_query(F.data == "back_to_files")
+async def back_to_files_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат к загрузке файлов"""
+    await callback.answer()
+    data = await state.get_data()
+    files = data.get("uploaded_files", [])
+    
+    logger.info(f"Back to files callback - current files count: {len(files)}")
+    
+    await callback.message.edit_text(
+        text=f"📁 **Загрузка файлов для дизайна**\n\n"
+             f"✅ Загружено файлов: {len(files)}\n\n"
+             "Прикрепите файлы макета (изображения, документы):\n"
+             "• Можно прикрепить несколько файлов\n"
+             "• Поддерживаются: фото, документы, видео\n\n"
+             "После загрузки файлов нажмите 'Далее'",
+        reply_markup=get_callback_btns(
+            btns={
+                "📁 Добавить файл": "add_file",
+                "🗑️ Удалить файлы": "clear_files" if files else "add_file",
+                "➡️ Далее": "proceed_to_preview",
+                "🔙 Назад": "back_to_date_selection",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1, 1, 1, 1)
+        )
+    )
+
+
+@new_user_router.callback_query(F.data == "proceed_to_preview")
+async def proceed_to_preview_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Переход к предварительному просмотру"""
+    await callback.answer()
+    await show_preview(callback.message, state)
+
+
+@new_user_router.callback_query(F.data == "back_to_subdivisions_from_date")
+async def back_to_subdivisions_from_date_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат к выбору подразделения из выбора даты"""
+    await callback.answer()
+    
+    # Получаем данные из FSM
+    data = await state.get_data()
+    current_message_id = data.get("current_message_id")
+    
+    # Показываем индикатор загрузки
+    loading_msg = await callback.message.answer("🔄 Загружаю подразделения...")
+    
+    try:
+        # Получаем список подразделений из кеша
+        subdivisions_dto = PaginateMarketingSubdivisionsDTO(callback.from_user.id)
+        subdivisions = await subdivisions_dto.get_cache_subdivisions()
+        
+        # Если кеш пустой, загружаем заново
+        if not subdivisions:
+            logger.info(f"Cache empty for user {callback.from_user.id}, reloading subdivisions")
+            subdivisions = await ItiliumBaseApi.get_marketing_subdivisions(callback.from_user.id)
+            
+            if not subdivisions:
+                await loading_msg.delete()
+                await callback.message.edit_text("Ошибка получения списка подразделений. Попробуйте позже.")
+                await state.clear()
+                return
+            
+            # Сохраняем в кеш
+            await subdivisions_dto.set_cache_subdivisions(subdivisions)
+        
+        # Удаляем индикатор загрузки
+        await loading_msg.delete()
+        
+        # Создаем клавиатуру для выбора подразделения
+        keyboard = await Helpers.get_paginated_kb_marketing_subdivisions(subdivisions, page=0)
+        
+        await callback.message.edit_text(
+            text="Выберите подразделение:",
+            reply_markup=keyboard
+        )
+        
+        await state.set_state(MarketingRequest.CHOOSE_SUBDIVISION)
+        logger.info(f"User {callback.from_user.id} returned to CHOOSE_SUBDIVISION from date selection")
+        
+    except Exception as e:
+        await loading_msg.delete()
+        logger.error(f"Error loading subdivisions for user {callback.from_user.id}: {e}")
+        await callback.message.edit_text("Ошибка загрузки подразделений. Попробуйте позже.")
+        await state.clear()
+
+
+# Обработчики отмены для всех состояний маркетинговых заявок
+@new_user_router.message(StateFilter(MarketingRequest.CHOOSE_REQUEST_TYPE), F.text == "Отмена")
+async def cancel_marketing_request_type(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+@new_user_router.message(StateFilter(MarketingRequest.CHOOSE_SERVICE), F.text == "Отмена")
+async def cancel_marketing_request_service(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+@new_user_router.message(StateFilter(MarketingRequest.CHOOSE_SUBDIVISION), F.text == "Отмена")
+async def cancel_marketing_request_subdivision(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+@new_user_router.message(StateFilter(MarketingRequest.CHOOSE_EXECUTION_DATE), F.text == "Отмена")
+async def cancel_marketing_request_date(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+@new_user_router.message(MarketingRequest.CHOOSE_EXECUTION_DATE, F.text != "Отмена")
+async def handle_date_input(message: types.Message, state: FSMContext):
+    """Обработка ввода даты пользователем"""
+    date_text = message.text.strip()
+    
+    try:
+        from datetime import datetime
+        # Пробуем разные форматы даты
+        for date_format in ["%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y"]:
+            try:
+                selected_date = datetime.strptime(date_text, date_format).date()
+                break
+            except ValueError:
+                continue
+        else:
+            raise ValueError("Неверный формат даты")
+        
+        # Проверяем, что дата не в прошлом
+        from datetime import date
+        today = date.today()
+        if selected_date < today:
+            await message.answer("❌ Дата не может быть в прошлом. Введите корректную дату:")
+            return
+        
+        # Сохраняем выбранную дату
+        await state.update_data(execution_date=selected_date)
+        
+        # Переходим к заполнению формы
+        await message.answer(f"✅ Дата исполнения: {selected_date.strftime('%d.%m.%Y')}")
+        await proceed_to_form(message, state)
+        
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат даты. Введите дату в формате ДД.ММ.ГГГГ (например: 25.12.2024):"
+        )
+
+
+
+
+@new_user_router.message(StateFilter(MarketingRequest.FILL_FORM_1), F.text == "Отмена")
+async def cancel_marketing_request_form1(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+@new_user_router.message(StateFilter(MarketingRequest.FILL_FORM_2), F.text == "Отмена")
+async def cancel_marketing_request_form2(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+@new_user_router.message(StateFilter(MarketingRequest.FILL_FORM_3), F.text == "Отмена")
+async def cancel_marketing_request_form3(message: types.Message, state: FSMContext):
+    """Отмена создания маркетинговой заявки"""
+    await message.answer("Создание заявки отменено.")
+    await state.clear()
+
+
+# Обработчики заполнения форм
+@new_user_router.message(MarketingRequest.FILL_FORM_1, F.text != "Отмена")
+async def fill_form_1_design(message: types.Message, state: FSMContext):
+    """Заполнение формы для дизайна"""
+    logger.info(f"Обработка сообщения в fill_form_1_design: {message.text}")
+    data = await state.get_data()
+    form_data = data.get("form_data", {})
+    logger.info(f"Текущие данные формы: {form_data}")
+    
+    if "layout_name" not in form_data:
+        form_data["layout_name"] = message.text
+        await state.update_data(form_data=form_data)
+        logger.info("Запрошены размеры")
+        await message.answer("Введите размеры (в мм или dpi):")
+    elif "dimensions" not in form_data:
+        form_data["dimensions"] = message.text
+        await state.update_data(form_data=form_data)
+        logger.info("Запрошено назначение")
+        await message.answer("Для чего: - печать - WEB-версия:")
+    elif "purpose" not in form_data:
+        form_data["purpose"] = message.text
+        await state.update_data(form_data=form_data)
+        logger.info("Запрошен обязательный текст")
+        await message.answer("Введите обязательный текст:")
+    elif "required_text" not in form_data:
+        form_data["required_text"] = message.text
+        await state.update_data(form_data=form_data)
+        
+        # Логируем переход к загрузке файлов
+        logger.info(f"Переход к загрузке файлов для дизайна. Все поля формы заполнены.")
+        
+        # Переходим к загрузке файлов (согласно ТЗ - файлы загружаются после заполнения всех полей)
+        await message.answer(
+            text="📁 **Загрузка файлов макета**\n\n"
+                 "Прикрепите файлы макета:\n"
+                 "• Можно прикрепить несколько файлов\n"
+                 "• Поддерживаются: фото, документы, видео\n\n"
+                 "После загрузки файлов нажмите 'Далее'",
+            reply_markup=get_callback_btns(
+                btns={
+                    "📁 Добавить файл": "add_file",
+                    "➡️ Далее": "proceed_to_preview",
+                    "🔙 Назад": "back_to_date_selection",
+                    "❌ Отмена": "cancel_marketing"
+                },
+                size=(1, 1, 1, 1)
+            )
+        )
+        await state.set_state(MarketingRequest.UPLOAD_FILES)
+        logger.info(f"Состояние изменено на UPLOAD_FILES")
+
+
+@new_user_router.message(MarketingRequest.FILL_FORM_2, F.text != "Отмена")
+async def fill_form_2_event(message: types.Message, state: FSMContext):
+    """Заполнение формы для мероприятия"""
+    data = await state.get_data()
+    form_data = data.get("form_data", {})
+    
+    if "event_theme" not in form_data:
+        form_data["event_theme"] = message.text
+        await state.update_data(form_data=form_data)
+        await message.answer("Введите описание мероприятия:")
+    elif "event_description" not in form_data:
+        form_data["event_description"] = message.text
+        await state.update_data(form_data=form_data)
+        await message.answer("Введите бюджет:")
+    elif "event_budget" not in form_data:
+        form_data["event_budget"] = message.text
+        await state.update_data(form_data=form_data)
+        await message.answer("Свободное поле для заполнения:")
+    elif "event_free_field" not in form_data:
+        form_data["event_free_field"] = message.text
+        await state.update_data(form_data=form_data)
+        await show_preview(message, state)
+
+
+@new_user_router.message(MarketingRequest.FILL_FORM_3, F.text != "Отмена")
+async def fill_form_3_other(message: types.Message, state: FSMContext):
+    """Заполнение формы для рекламы, SMM, акций и прочего"""
+    data = await state.get_data()
+    form_data = data.get("form_data", {})
+    
+    # Для формы 3 только одно свободное поле
+    form_data["free_text"] = message.text
+    await state.update_data(form_data=form_data)
+    await show_preview(message, state)
+
+
+async def show_preview(message: types.Message, state: FSMContext):
+    """Показ предварительного просмотра заявки"""
+    logger.info(f"Starting show_preview for user {message.from_user.id}")
+    data = await state.get_data()
+    logger.info(f"FSM data: {data}")
+    
+    selected_service = data.get("selected_service", {})
+    selected_subdivision = data.get("selected_subdivision", {})
+    execution_date = data.get("execution_date")
+    form_data = data.get("form_data", {})
+    
+    logger.info(f"Selected service: {selected_service}")
+    logger.info(f"Selected subdivision: {selected_subdivision}")
+    logger.info(f"Execution date: {execution_date}")
+    logger.info(f"Form data: {form_data}")
+    
+    # Первое сообщение - основная информация
+    basic_info = f"📋 **Предварительный просмотр заявки**\n\n"
+    basic_info += f"**Сервис:** {selected_service.get('КомпонентаУслуги', 'Не выбран')}\n"
+    basic_info += f"**Подразделение:** {selected_subdivision if selected_subdivision else 'Не выбрано'}\n"
+    basic_info += f"**Дата исполнения:** {execution_date.strftime('%d.%m.%Y') if execution_date else 'Не указана'}\n"
+    
+    await message.answer(text=basic_info)
+    
+    # Второе сообщение - данные формы
+    form_number = selected_service.get("НомерФормы", 3)
+    if form_number == 1:  # Дизайн
+        form_info = "**📝 Данные формы (Дизайн):**\n"
+        form_info += f"**Название макета:** {form_data.get('layout_name', 'Не указано')}\n"
+        form_info += f"**Размеры:** {form_data.get('dimensions', 'Не указаны')}\n"
+        form_info += f"**Назначение:** {form_data.get('purpose', 'Не указано')}\n"
+        form_info += f"**Обязательный текст:** {form_data.get('required_text', 'Не указан')}\n"
+        form_info += f"**Форматы:** {form_data.get('formats', 'Не указаны')}\n"
+            
+        await message.answer(text=form_info)
+        
+        # Третье сообщение - файлы
+        uploaded_files = data.get("uploaded_files", [])
+        uploaded_file_names = data.get("uploaded_file_names", [])
+        if uploaded_files:
+            files_info = f"**📁 Загружено файлов:** {len(uploaded_files)}\n"
+            for i, file_name in enumerate(uploaded_file_names, 1):
+                files_info += f"  {i}. {file_name}\n"
+        else:
+            files_info = "**📁 Файлы:** Не загружены\n"
+            
+        await message.answer(text=files_info)
+        
+    elif form_number == 2:  # Мероприятие
+        form_info = "**📝 Данные формы (Мероприятие):**\n"
+        form_info += f"**Тема мероприятия:** {form_data.get('event_theme', 'Не указана')}\n"
+        form_info += f"**Описание:** {form_data.get('event_description', 'Не указано')}\n"
+        form_info += f"**Бюджет:** {form_data.get('event_budget', 'Не указан')}\n"
+        if form_data.get('event_free_field'):
+            form_info += f"**Дополнительно:** {form_data.get('event_free_field', '')}\n"
+            
+        await message.answer(text=form_info)
+        
+    else:  # Реклама, SMM, Акция, Иное
+        form_info = "**📝 Данные формы:**\n"
+        form_info += f"**Описание:** {form_data.get('free_text', 'Не указано')}\n"
+            
+        await message.answer(text=form_info)
+    
+    # Последнее сообщение с кнопками
+    await message.answer(
+        text="**Выберите действие:**",
+        reply_markup=get_callback_btns(
+            btns={
+                "✅ Создать заявку": "confirm_create_request",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1)
+        )
+    )
+    await state.set_state(MarketingRequest.PREVIEW_REQUEST)
+
+
+@new_user_router.callback_query(F.data == "confirm_create_request")
+async def confirm_create_request_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Подтверждение создания заявки"""
+    await callback.answer()
+    await callback.message.edit_text(
+        text="Отправить заявку?",
+        reply_markup=get_callback_btns(
+            btns={
+                "✅ Да": "finalize_request",
+                "❌ Нет": "back_to_preview",
+                "🚫 Отмена": "cancel_marketing"
+            },
+            size=(1, 1, 1)
+        )
+    )
+    await state.set_state(MarketingRequest.CONFIRM_REQUEST)
+
+
+@new_user_router.callback_query(F.data == "finalize_request")
+async def finalize_request_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Финальное создание заявки"""
+    await callback.answer()
+    data = await state.get_data()
+    
+    # Формируем JSON для логирования
+    uploaded_files = data.get("uploaded_files", [])
+    uploaded_file_names = data.get("uploaded_file_names", [])
+    
+    # Создаем список файлов с именами и путями
+    files_with_names = []
+    for i, file_path in enumerate(uploaded_files):
+        file_name = uploaded_file_names[i] if i < len(uploaded_file_names) else f"Файл_{i+1}"
+        files_with_names.append({
+            "name": file_name,
+            "path": file_path
+        })
+    
+    request_data = {
+        "service": data.get("selected_service", {}),
+        "subdivision": data.get("selected_subdivision", {}),
+        "execution_date": data.get("execution_date").strftime('%d.%m.%Y') if data.get("execution_date") else None,
+        "form_data": data.get("form_data", {}),
+        "uploaded_files": files_with_names,
+        "user_id": callback.from_user.id,
+        "username": callback.from_user.username
+    }
+    
+    # Логируем JSON
+    logger.info(f"Marketing request created: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
+    
+    # Удаляем кнопки и отправляем сообщение об успехе
+    await callback.message.edit_text("✅ Заявка успешно создана!")
+    await state.clear()
+
+
+@new_user_router.callback_query(F.data == "back_to_preview")
+async def back_to_preview_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат к предварительному просмотру"""
+    await callback.answer()
+    await show_preview(callback.message, state)
+
+
+@new_user_router.message(MarketingRequest.CONFIRM_REQUEST, F.text == "Отмена")
+async def cancel_final_request(message: types.Message, state: FSMContext):
+    """Отмена финального создания заявки"""
+    await message.answer("Создание заявки отменено.")
     await state.clear()
 
 

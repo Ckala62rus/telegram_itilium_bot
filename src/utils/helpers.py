@@ -256,6 +256,48 @@ class Helpers:
         return builder.as_markup()
 
     @staticmethod
+    async def get_paginated_kb_marketing_subdivisions(subdivisions: list, page: int = 0) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        start_offset = page * 10
+        end_offset = start_offset + 10
+        count_page = len(subdivisions)
+
+        for i, subdivision in enumerate(subdivisions[start_offset:end_offset]):
+            # Используем глобальный индекс для callback data
+            global_index = start_offset + i
+            
+            # Правильно обрабатываем кодировку
+            if isinstance(subdivision, str):
+                # Если это строка, пытаемся декодировать из unicode escape
+                try:
+                    # Проверяем, содержит ли строка unicode escape последовательности
+                    if '\\u' in subdivision:
+                        subdivision = subdivision.encode().decode('unicode_escape')
+                except:
+                    pass  # Если не получается декодировать, используем как есть
+            
+            builder.row(InlineKeyboardButton(
+                text=subdivision,
+                callback_data=f"select_sub_{global_index}"
+            ))
+
+        buttons_row = []
+
+        if page > 0:
+            buttons_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"subdivisions_page_{page - 1}", ))
+
+        if page != count_page and end_offset < count_page:
+            buttons_row.append(InlineKeyboardButton(text="➡️", callback_data=f"subdivisions_page_{page + 1}", ))
+
+        builder.row(*buttons_row)
+
+        builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_services", ))
+        builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_marketing", ))
+
+        return builder.as_markup()
+
+    @staticmethod
     def delete_html_tags_from_text(text: str) -> str:
         s = MLStripper()
         s.feed(text)

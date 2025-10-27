@@ -18,24 +18,30 @@ class AsyncRedisClient:
     async def get_client(self):
         if self._client is None:
             try:
-                self._client = redis.Redis(
-                    host=settings.REDIS_HOST,
-                    port=settings.REDIS_PORT,
-                    password=settings.REDIS_PASSWORD,
-                    db=settings.REDIS_DATABASE,
-                    decode_responses=True,
-                )
+                # Создаем подключение к Redis с опциональным паролем
+                redis_config = {
+                    'host': settings.REDIS_HOST,
+                    'port': settings.REDIS_PORT,
+                    'db': settings.REDIS_DATABASE,
+                    'decode_responses': True,
+                }
+                
+                # Добавляем пароль только если он установлен
+                if settings.REDIS_PASSWORD:
+                    redis_config['password'] = settings.REDIS_PASSWORD
+                
+                self._client = redis.Redis(**redis_config)
                 await self._client.ping()
                 logger.info("Connected to Redis successfully.")
             except TimeoutError:
-                logger.error('❌ Ошибка. Подключение к базе данных Redis')
-                sys.exit()
+                logger.warning('⚠️ Предупреждение. Не удалось подключиться к Redis (таймаут). Бот будет работать без кэширования.')
+                self._client = None
             except AuthenticationError:
-                logger.error('❌ Ошибка. Не удалось выполнить аутентификацию соединения Redis с базой данных.')
-                sys.exit()
+                logger.warning('⚠️ Предупреждение. Ошибка аутентификации Redis. Бот будет работать без кэширования.')
+                self._client = None
             except Exception as e:
-                logger.error(f'❌ Ошибка. Неверное соединение с базой данных Redis: {e}')
-                sys.exit()
+                logger.warning(f'⚠️ Предупреждение. Ошибка подключения к Redis: {e}. Бот будет работать без кэширования.')
+                self._client = None
         return self._client
 
 # Экземпляр singleton-клиента

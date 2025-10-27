@@ -19,3 +19,6 @@ class ChangeScStatus(StatesGroup):
     enter_date = State()
     confirm = State()
     confirm_without_date = State()
+
+class MarketingCalendar(StatesGroup):
+    select_date = State()

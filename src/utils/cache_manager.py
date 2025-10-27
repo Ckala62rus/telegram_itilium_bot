@@ -19,6 +19,8 @@ class CacheManager:
         """Получает данные из кэша"""
         try:
             redis_client = await async_redis_client.get_client()
+            if redis_client is None:
+                return None  # Если Redis недоступен, возвращаем None
             data = await redis_client.get(key)
             if data:
                 return json.loads(data)
@@ -31,6 +33,8 @@ class CacheManager:
         """Сохраняет данные в кэш"""
         try:
             redis_client = await async_redis_client.get_client()
+            if redis_client is None:
+                return False  # Если Redis недоступен, возвращаем False
             ttl = ttl or self.default_ttl
             await redis_client.setex(key, ttl, json.dumps(value))
             return True
@@ -42,6 +46,8 @@ class CacheManager:
         """Удаляет данные из кэша"""
         try:
             redis_client = await async_redis_client.get_client()
+            if redis_client is None:
+                return False  # Если Redis недоступен, возвращаем False
             await redis_client.delete(key)
             return True
         except Exception as e:
@@ -52,6 +58,8 @@ class CacheManager:
         """Проверяет существование ключа в кэше"""
         try:
             redis_client = await async_redis_client.get_client()
+            if redis_client is None:
+                return False  # Если Redis недоступен, считаем что ключа нет
             return await redis_client.exists(key)
         except Exception as e:
             logger.error(f"Ошибка проверки кэша {key}: {e}")

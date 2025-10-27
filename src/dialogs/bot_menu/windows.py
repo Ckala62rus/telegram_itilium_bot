@@ -5,7 +5,7 @@ from aiogram_dialog.widgets.text import Const, Format
 import logging
 
 from dialogs.bot_menu import selected
-from dialogs.bot_menu.states import ChangeScStatus
+from dialogs.bot_menu.states import ChangeScStatus, MarketingCalendar
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,13 @@ def set_date_for_sc():
         Cancel(Const("Отмена")),
         Calendar(id='calendar', on_click=selected.on_date_selected),
         state = ChangeScStatus.enter_date
+    )
+
+def set_date_for_marketing():
+    return Window(
+        Const("📅 Выберите дату исполнения заявки:"),
+        Calendar(id='calendar', on_click=selected.on_date_selected),
+        state = MarketingCalendar.select_date
     )
 
 def confirm_change_state_sc():

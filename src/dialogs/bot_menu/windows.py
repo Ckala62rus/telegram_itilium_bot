@@ -6,6 +6,7 @@ import logging
 
 from dialogs.bot_menu import selected
 from dialogs.bot_menu.states import ChangeScStatus, MarketingCalendar
+from dialogs.bot_menu.calendar_widgets import RussianCalendar
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def set_date_for_sc():
 def set_date_for_marketing():
     return Window(
         Const("📅 Выберите дату исполнения заявки:"),
-        Calendar(id='calendar', on_click=selected.on_date_selected),
+        RussianCalendar(id='calendar', on_click=selected.on_date_selected),
         state = MarketingCalendar.select_date
     )
 

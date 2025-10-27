@@ -54,18 +54,16 @@ class ItiliumBaseApi:
                 await message.message.answer(f"Доступ запрещён.")
 
             logger.debug(f"response code: {response.status_code} | response text: {response.text}")
+            
+            if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:
+                return json.loads(response.text)
+            else:
+                logger.debug(f"Empty or invalid response from Itilium")
+                return None
         except Exception as e:
             logger.error(e)
-            await message.answer()
-            await message.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
-            return None
-
-        if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:
-            return json.loads(response.text)
-        else:
-            await message.answer(f"Вы отсутствуете в Итилиуме. "
-                                 f"Сообщите администратору ваш id {message.from_user.id} для добавления")
-            return None
+            # Пробрасываем ошибку для обработки в handlers
+            raise
 
     @staticmethod
     async def create_new_sc(data: dict, files: list) -> Response:
@@ -221,7 +219,7 @@ class ItiliumBaseApi:
         if comment:
             url += f"&comment_text={comment}"
 
-        return await (ItiliumBaseApi.send_request("GET", url, None))
+        return await (ItiliumBaseApi.send_request("POST", url, None))
 
     @staticmethod
     async def scs_responsibility_tasks(telegram_user_id: int) -> Response:

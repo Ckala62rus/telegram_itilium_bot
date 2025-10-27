@@ -14,6 +14,9 @@ class PaginateResponsibleScsDTO:
         Устанавливаем кэш данных по заявкам конкретного пользователя в Redis
         """
         redis_client = await async_redis_client.get_client()
+        if redis_client is None:
+            return  # Если Redis недоступен, просто пропускаем кэширование
+        
         # кешируем результат
         # Добавление элемента в начало списка
         for sc in scs:
@@ -27,6 +30,8 @@ class PaginateResponsibleScsDTO:
         Получаем кэш данных по заявкам конкретного пользователя из Redis
         """
         redis_client = await async_redis_client.get_client()
+        if redis_client is None:
+            return []  # Если Redis недоступен, возвращаем пустой список
         # извлекаем из редиса
         return await redis_client.lrange(f"responsible:{str(self.user_id)}", 0, -1)
 
@@ -35,4 +40,6 @@ class PaginateResponsibleScsDTO:
         Проверяем, существует ли ключ в Redis
         """
         redis_client = await async_redis_client.get_client()
+        if redis_client is None:
+            return False  # Если Redis недоступен, считаем что данных нет
         return await redis_client.exists(f"responsible:{str(self.user_id)}")

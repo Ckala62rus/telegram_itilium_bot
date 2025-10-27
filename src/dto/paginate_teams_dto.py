@@ -16,6 +16,9 @@ class PaginateTeamsDTO:
         Устанавливаем кэш данных по подразделениям конкретного пользователя в Redis
         """
         redis_client = await async_redis_client.get_client()
+        if redis_client is None:
+            return  # Если Redis недоступен, просто пропускаем кэширование
+        
         # кешируем результат
         for team in teams:
             await redis_client.rpush(f"teams:{str(self.user_id)}:{self.sc_number}", json.dumps(team))
@@ -28,6 +31,8 @@ class PaginateTeamsDTO:
         Получаем кэш данных по подразделениям конкретного пользователя из Redis
         """
         redis_client = await async_redis_client.get_client()
+        if redis_client is None:
+            return []  # Если Redis недоступен, возвращаем пустой список
         # извлекаем из редиса
         return await redis_client.lrange(f"teams:{str(self.user_id)}:{self.sc_number}", 0, -1)
 
@@ -36,4 +41,6 @@ class PaginateTeamsDTO:
         Проверяем, существует ли ключ в Redis
         """
         redis_client = await async_redis_client.get_client()
+        if redis_client is None:
+            return False  # Если Redis недоступен, считаем что данных нет
         return await redis_client.exists(f"teams:{str(self.user_id)}:{self.sc_number}")

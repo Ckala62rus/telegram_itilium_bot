@@ -26,6 +26,9 @@ class ApiUrls:
                                          )
     GET_RESPONSIBLES: str = "responsibles_sc?telegram={telegram_user_id}&sc_number={sc_number}"
     CHANGE_RESPONSIBLE: str = "change_responsible_sc?telegram={telegram_user_id}&inc_number={inc_number}&responsibleEmployeeId={responsible_employee_id}"
+    
+    # Маркетинговые заявки
+    CREATE_SC_MARKETING: str = "create_sc_Marketing"
 
 
 apiUrls = ApiUrls()

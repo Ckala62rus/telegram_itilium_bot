@@ -54,18 +54,16 @@ class ItiliumBaseApi:
                 await message.message.answer(f"Доступ запрещён.")
 
             logger.debug(f"response code: {response.status_code} | response text: {response.text}")
+            
+            if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:
+                return json.loads(response.text)
+            else:
+                logger.debug(f"Empty or invalid response from Itilium")
+                return None
         except Exception as e:
             logger.error(e)
-            await message.answer()
-            await message.message.answer("1С Итилиум прислал пустой ответ. Обратитесь к администратору")
-            return None
-
-        if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:
-            return json.loads(response.text)
-        else:
-            await message.answer(f"Вы отсутствуете в Итилиуме. "
-                                 f"Сообщите администратору ваш id {message.from_user.id} для добавления")
-            return None
+            # Пробрасываем ошибку для обработки в handlers
+            raise
 
     @staticmethod
     async def create_new_sc(data: dict, files: list) -> Response:
@@ -221,7 +219,7 @@ class ItiliumBaseApi:
         if comment:
             url += f"&comment_text={comment}"
 
-        return await (ItiliumBaseApi.send_request("GET", url, None))
+        return await (ItiliumBaseApi.send_request("POST", url, None))
 
     @staticmethod
     async def scs_responsibility_tasks(telegram_user_id: int) -> Response:
@@ -359,3 +357,77 @@ class ItiliumBaseApi:
         except Exception as e:
             logger.error(f"Error getting marketing subdivisions: {e}")
             return None
+    
+    @staticmethod
+    async def create_marketing_request(
+        telegram_id: int,
+        service: str,
+        subdivision: str,
+        execution_date: str,
+        form_data: dict,
+        files: list = None
+    ) -> Response:
+        """
+        Создание маркетинговой заявки
+        
+        :param telegram_id: ID пользователя в Telegram
+        :param service: Название услуги (Дизайн, Мероприятие, и т.д.)
+        :param subdivision: Название подразделения
+        :param execution_date: Дата исполнения (формат DD.MM.YYYY)
+        :param form_data: Данные формы (зависят от типа услуги)
+        :param files: Список файлов
+        :return: Response от API
+        """
+        try:
+            # Формируем данные запроса
+            request_data = {
+                "telegram": telegram_id,
+                "Services": service,
+                "Subdivision": subdivision,
+                "ExecutionDate": execution_date,
+            }
+            
+            # Добавляем данные формы в зависимости от типа услуги
+            if service == "Дизайн":
+                request_data.update({
+                    "LayoutName": form_data.get("layout_name", ""),
+                    "Size": form_data.get("dimensions", ""),
+                    "ForWhat": form_data.get("purpose", ""),
+                    "RequiredText": form_data.get("required_text", ""),
+                    "LayoutFormats": form_data.get("formats", ""),
+                })
+            elif service == "Мероприятие":
+                request_data.update({
+                    "ThemeEvent": form_data.get("event_theme", ""),
+                    "Description": form_data.get("description", ""),
+                    "Budget": form_data.get("budget", ""),
+                })
+                if "free_text" in form_data:
+                    request_data["Description"] = form_data.get("free_text", "")
+            else:  # Реклама, SMM, Акция, Иное
+                request_data.update({
+                    "Description": form_data.get("free_text", ""),
+                })
+            
+            # Добавляем файлы
+            if files:
+                request_data["files"] = json.dumps(files)
+            
+            logger.info(f"Creating marketing request for user {telegram_id}")
+            logger.debug(f"Request data: {request_data}")
+            
+            # Отправляем запрос
+            response = await ItiliumBaseApi.send_request(
+                method="POST",
+                url=ApiUrls.CREATE_SC_MARKETING,
+                data=request_data
+            )
+            
+            logger.info(f"Marketing request response status: {response.status_code}")
+            logger.debug(f"Marketing request response: {response.text}")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error creating marketing request: {e}")
+            raise

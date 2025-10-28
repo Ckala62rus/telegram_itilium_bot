@@ -357,3 +357,77 @@ class ItiliumBaseApi:
         except Exception as e:
             logger.error(f"Error getting marketing subdivisions: {e}")
             return None
+    
+    @staticmethod
+    async def create_marketing_request(
+        telegram_id: int,
+        service: str,
+        subdivision: str,
+        execution_date: str,
+        form_data: dict,
+        files: list = None
+    ) -> Response:
+        """
+        Создание маркетинговой заявки
+        
+        :param telegram_id: ID пользователя в Telegram
+        :param service: Название услуги (Дизайн, Мероприятие, и т.д.)
+        :param subdivision: Название подразделения
+        :param execution_date: Дата исполнения (формат DD.MM.YYYY)
+        :param form_data: Данные формы (зависят от типа услуги)
+        :param files: Список файлов
+        :return: Response от API
+        """
+        try:
+            # Формируем данные запроса
+            request_data = {
+                "telegram": telegram_id,
+                "Services": service,
+                "Subdivision": subdivision,
+                "ExecutionDate": execution_date,
+            }
+            
+            # Добавляем данные формы в зависимости от типа услуги
+            if service == "Дизайн":
+                request_data.update({
+                    "LayoutName": form_data.get("layout_name", ""),
+                    "Size": form_data.get("dimensions", ""),
+                    "ForWhat": form_data.get("purpose", ""),
+                    "RequiredText": form_data.get("required_text", ""),
+                    "LayoutFormats": form_data.get("formats", ""),
+                })
+            elif service == "Мероприятие":
+                request_data.update({
+                    "ThemeEvent": form_data.get("event_theme", ""),
+                    "Description": form_data.get("description", ""),
+                    "Budget": form_data.get("budget", ""),
+                })
+                if "free_text" in form_data:
+                    request_data["Description"] = form_data.get("free_text", "")
+            else:  # Реклама, SMM, Акция, Иное
+                request_data.update({
+                    "Description": form_data.get("free_text", ""),
+                })
+            
+            # Добавляем файлы
+            if files:
+                request_data["files"] = json.dumps(files)
+            
+            logger.info(f"Creating marketing request for user {telegram_id}")
+            logger.debug(f"Request data: {request_data}")
+            
+            # Отправляем запрос
+            response = await ItiliumBaseApi.send_request(
+                method="POST",
+                url=ApiUrls.CREATE_SC_MARKETING,
+                data=request_data
+            )
+            
+            logger.info(f"Marketing request response status: {response.status_code}")
+            logger.debug(f"Marketing request response: {response.text}")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error creating marketing request: {e}")
+            raise

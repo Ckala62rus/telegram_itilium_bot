@@ -21,6 +21,9 @@ class MarketingRequest(StatesGroup):
     FILL_FORM_2 = State()  # Мероприятие
     FILL_FORM_3 = State()  # Реклама, SMM, Акция, Иное
     
+    # Поле форматов для дизайна
+    FILL_LAYOUT_FORMATS = State()  # Форматы предоставления макета
+    
     # Загрузка файлов для дизайна
     UPLOAD_FILES = State()
     

@@ -2483,29 +2483,44 @@ async def fill_form_1_design(message: types.Message, state: FSMContext):
     elif "required_text" not in form_data:
         form_data["required_text"] = message.text
         await state.update_data(form_data=form_data)
-        
-        # Логируем переход к загрузке файлов
-        logger.info(f"Переход к загрузке файлов для дизайна. Все поля формы заполнены.")
-        
-        # Переходим к загрузке файлов (согласно ТЗ - файлы загружаются после заполнения всех полей)
-        await message.answer(
-            text="📁 **Загрузка файлов макета**\n\n"
-                 "Прикрепите файлы макета:\n"
-                 "• Можно прикрепить несколько файлов\n"
-                 "• Поддерживаются: фото, документы, видео\n\n"
-                 "После загрузки файлов нажмите 'Далее'",
-            reply_markup=get_callback_btns(
-                btns={
-                    "📁 Добавить файл": "add_file",
-                    "➡️ Далее": "proceed_to_preview",
-                    "🔙 Назад": "back_to_date_selection",
-                    "❌ Отмена": "cancel_marketing"
-                },
-                size=(1, 1, 1, 1)
-            )
+        logger.info("Запрошены форматы предоставления макета")
+        await message.answer("Введите форматы предоставления макета (pdf, png, psd, tiff, crd):")
+        await state.set_state(MarketingRequest.FILL_LAYOUT_FORMATS)
+
+
+@new_user_router.message(MarketingRequest.FILL_LAYOUT_FORMATS, F.text != "Отмена")
+async def fill_layout_formats(message: types.Message, state: FSMContext):
+    """Заполнение форматов предоставления макета"""
+    logger.info(f"Обработка сообщения в fill_layout_formats: {message.text}")
+    data = await state.get_data()
+    form_data = data.get("form_data", {})
+    
+    # Сохраняем форматы
+    form_data["formats"] = message.text
+    await state.update_data(form_data=form_data)
+    
+    # Логируем переход к загрузке файлов
+    logger.info(f"Переход к загрузке файлов для дизайна. Все поля формы заполнены.")
+    
+    # Переходим к загрузке файлов (согласно ТЗ - файлы загружаются после заполнения всех полей)
+    await message.answer(
+        text="📁 **Загрузка файлов макета**\n\n"
+             "Прикрепите файлы макета:\n"
+             "• Можно прикрепить несколько файлов\n"
+             "• Поддерживаются: фото, документы, видео\n\n"
+             "После загрузки файлов нажмите 'Далее'",
+        reply_markup=get_callback_btns(
+            btns={
+                "📁 Добавить файл": "add_file",
+                "➡️ Далее": "proceed_to_preview",
+                "🔙 Назад": "back_to_date_selection",
+                "❌ Отмена": "cancel_marketing"
+            },
+            size=(1, 1, 1, 1)
         )
-        await state.set_state(MarketingRequest.UPLOAD_FILES)
-        logger.info(f"Состояние изменено на UPLOAD_FILES")
+    )
+    await state.set_state(MarketingRequest.UPLOAD_FILES)
+    logger.info(f"Состояние изменено на UPLOAD_FILES")
 
 
 @new_user_router.message(MarketingRequest.FILL_FORM_2, F.text != "Отмена")
@@ -2650,12 +2665,12 @@ async def finalize_request_callback(callback: types.CallbackQuery, state: FSMCon
     uploaded_files = data.get("uploaded_files", [])
     uploaded_file_names = data.get("uploaded_file_names", [])
     
-    # Создаем список файлов с именами и путями
+    # Создаем список файлов с именами и путями (формат как в create_new_sc)
     files_with_names = []
     for i, file_path in enumerate(uploaded_files):
-        file_name = uploaded_file_names[i] if i < len(uploaded_file_names) else f"Файл_{i+1}"
+        filename = uploaded_file_names[i] if i < len(uploaded_file_names) else f"Файл_{i+1}"
         files_with_names.append({
-            "name": file_name,
+            "filename": filename,
             "path": file_path
         })
     
@@ -2670,11 +2685,41 @@ async def finalize_request_callback(callback: types.CallbackQuery, state: FSMCon
     }
     
     # Логируем JSON
-    logger.info(f"Marketing request created: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
+    logger.info(f"Marketing request data: {json.dumps(request_data, ensure_ascii=False, indent=2)}")
     
-    # Удаляем кнопки и отправляем сообщение об успехе
-    await callback.message.edit_text("✅ Заявка успешно создана!")
-    await state.clear()
+    try:
+        # Отправляем заявку в API
+        response = await ItiliumBaseApi.create_marketing_request(
+            telegram_id=callback.from_user.id,
+            service=data.get("selected_service", {}).get("КомпонентаУслуги", ""),
+            subdivision=data.get("selected_subdivision", ""),
+            execution_date=data.get("execution_date").strftime('%Y.%m.%d') if data.get("execution_date") else "",
+            form_data=data.get("form_data", {}),
+            files=files_with_names
+        )
+        
+        logger.info(f"API Response: {response.status_code} - {response.text}")
+        
+        if response.status_code == 200 or response.status_code == 201:
+            # Удаляем кнопки и отправляем сообщение об успехе
+            await callback.message.edit_text("✅ Заявка успешно создана!")
+        else:
+            # Ошибка создания заявки
+            await callback.message.edit_text(
+                f"❌ **Ошибка создания заявки**\n\n"
+                f"Код ошибки: {response.status_code}\n"
+                f"Попробуйте создать заявку позже или обратитесь к администратору."
+            )
+        
+        await state.clear()
+        
+    except Exception as e:
+        logger.error(f"Error creating marketing request: {e}")
+        await callback.message.edit_text(
+            "❌ **Ошибка создания заявки**\n\n"
+            "Не удалось создать заявку. Попробуйте позже или обратитесь к администратору."
+        )
+        await state.clear()
 
 
 @new_user_router.callback_query(F.data == "back_to_preview")

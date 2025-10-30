@@ -7,7 +7,7 @@ class MessageTemplates(StrEnum):
     ACTIONS_CANCELED = "Действия отменены"
     ACTIONS_CANCELED_SIMPLE = "действия отменены"
     ACCESS_DENIED = "Доступ запрещён."
-    ITILIUM_EMPTY_RESPONSE = "1С Итилиум прислал пустой ответ. Обратитесь к администратору"
+    ITILIUM_EMPTY_RESPONSE = "1С Итилиум прислал пустой ответ. Обратитесь к администратору. Попробуйте еще раз."
     ITILIUM_ERROR = "При запросе в Итилиум произошла ошибка"
     CONTACT_ADMIN = "Обратитесь к администратору"
     

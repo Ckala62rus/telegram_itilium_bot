@@ -217,34 +217,12 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
         # Сбрасываем FSM состояние при ошибке
         await state.clear()
         
-        # Проверяем тип ошибки для более понятного сообщения
-        if "ConnectError" in str(type(e)) or "Try again" in str(e):
-            await callback.message.answer(
-                "❌ **Ошибка подключения к серверу**\n\n"
-                "Не удается подключиться к системе Итилиум. "
-                "Попробуйте создать заявку еще раз через несколько минут.\n\n"
-                "Если проблема повторяется, обратитесь к администратору.",
-                reply_markup=get_callback_btns(
-                    btns={
-                        "🔄 Попробовать снова": "crate_new_issue",
-                        "❌ Отмена": "cancel_marketing"
-                    },
-                    size=(1, 1)
-                )
-            )
-        else:
-            await callback.message.answer(
-                "❌ **Произошла ошибка**\n\n"
-                "Не удалось загрузить данные пользователя. "
-                "Попробуйте создать заявку еще раз.",
-                reply_markup=get_callback_btns(
-                    btns={
-                        "🔄 Попробовать снова": "crate_new_issue",
-                        "❌ Отмена": "cancel_marketing"
-                    },
-                    size=(1, 1)
-                )
-            )
+        # Показываем единое сообщение об ошибке от Итилиума и не отображаем кнопки отмены/повтора
+        from utils.message_templates import MessageTemplates
+        await callback.message.answer(
+            text=MessageTemplates.ITILIUM_EMPTY_RESPONSE,
+            reply_markup=types.ReplyKeyboardRemove()
+        )
         
         await state.clear()
         logger.error(f"Error loading user data: {e}")
@@ -268,11 +246,9 @@ async def confirm_crate_new_issue_command(
     except Exception as e:
         logger.error(f"Error getting user data: {e}")
         await state.clear()
+        from utils.message_templates import MessageTemplates
         await message.answer(
-            text="❌ **Ошибка подключения к серверу**\n\n"
-                 "Не удается подключиться к системе Итилиум. "
-                 "Попробуйте создать заявку еще раз через несколько минут.\n\n"
-                 "Если проблема повторяется, обратитесь к администратору.",
+            text=MessageTemplates.ITILIUM_EMPTY_RESPONSE,
             reply_markup=types.ReplyKeyboardRemove()
         )
         return
@@ -286,7 +262,12 @@ async def confirm_crate_new_issue_command(
         )
         return
 
-    # send date to itilium api for create issue
+    # send data to itilium api for create issue
+    # Показать индикатор отправки и убрать клавиатуру с кнопками
+    loading_msg = await message.answer(
+        "⏳ Отправляю заявку...",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
     try:
         response: Response = await ItiliumBaseApi.create_new_sc({
             "UUID": user_data_from_itilium["UUID"],
@@ -296,20 +277,29 @@ async def confirm_crate_new_issue_command(
 
         logger.debug(f"{response.status_code} | {response.text}")
 
-        if response.status_code == httpx.codes.OK:
-            await message.answer(
-                text=f"Ваша завка успешно создана!\n\r{json.loads(response.text)}",
-                reply_markup=types.ReplyKeyboardRemove()
-            )
+        if response.status_code in (httpx.codes.OK, httpx.codes.CREATED, httpx.codes.NO_CONTENT):
+            # Удаляем служебное сообщение "Отправляю заявку..." и отправляем новое об успехе
+            try:
+                await loading_msg.delete()
+            except Exception:
+                pass
+            await message.answer("✅ Заявка успешно создана!")
         else:
             logger.debug(f"{response.text}")
+            try:
+                await loading_msg.delete()
+            except Exception:
+                pass
             await message.answer(
-                text=f"Не удалось создать заявку. Ошибка сервера {response.text}\n\rПовотрите попытку позже",
-                reply_markup=types.ReplyKeyboardRemove()
+                text="❌ Не удалось создать заявку. Проблемы на стороне Итилиума. Обратитесь к администратору."
             )
     except Exception as e:
         logger.exception(e)
-        await message.answer(f"Ошибка: {str(e)}")
+        try:
+            await loading_msg.delete()
+        except Exception:
+            pass
+        await message.answer("❌ Не удалось создать заявку. Проблемы на стороне Итилиума. Обратитесь к администратору.")
 
     await state.clear()
 
@@ -2193,8 +2183,7 @@ async def proceed_to_form(callback_or_message, state: FSMContext):
         logger.info("proceed_to_form: Entering form 1 (Design) logic")
         # Форма для дизайна - сначала заполняем форму, потом файлы
         await message.edit_text(
-            text="📝 **Заполните форму для дизайна**\n\n"
-                 "Введите название макета (баннер, афиша):",
+            text="Введите название макета (баннер, афиша):",
             reply_markup=get_callback_btns(
                 btns={"❌ Отмена": "cancel_marketing"},
                 size=(1,)
@@ -2204,8 +2193,7 @@ async def proceed_to_form(callback_or_message, state: FSMContext):
     elif form_number == 2:
         # Форма для мероприятия
         await message.edit_text(
-            text="📝 **Заполните форму для мероприятия**\n\n"
-                 "Введите тему мероприятия:",
+            text="Введите тему мероприятия:",
             reply_markup=get_callback_btns(
                 btns={"❌ Отмена": "cancel_marketing"},
                 size=(1,)
@@ -2215,8 +2203,7 @@ async def proceed_to_form(callback_or_message, state: FSMContext):
     else:
         # Форма для рекламы, SMM, акций, иного
         await message.edit_text(
-            text="📝 **Заполните форму**\n\n"
-                 "Введите описание заявки:",
+            text="Введите описание заявки:",
             reply_markup=get_callback_btns(
                 btns={"❌ Отмена": "cancel_marketing"},
                 size=(1,)
@@ -2618,17 +2605,17 @@ async def show_preview(message: types.Message, state: FSMContext):
         await message.answer(text=form_info)
         
     else:  # Реклама, SMM, Акция, Иное
-        form_info = "**📝 Данные формы:**\n"
-        form_info += f"**Описание:** {form_data.get('free_text', 'Не указано')}\n"
+        # form_info = "**📝 Данные формы:**\n"
+        form_info = f"**Описание:** {form_data.get('free_text', 'Не указано')}\n"
             
         await message.answer(text=form_info)
     
-    # Последнее сообщение с кнопками
+    # Последнее сообщение с кнопками: отправляем напрямую без дополнительного подтверждения
     await message.answer(
         text="**Выберите действие:**",
         reply_markup=get_callback_btns(
             btns={
-                "✅ Создать заявку": "confirm_create_request",
+                "✅ Отправить заявку": "finalize_request",
                 "❌ Отмена": "cancel_marketing"
             },
             size=(1, 1)
@@ -2660,6 +2647,12 @@ async def finalize_request_callback(callback: types.CallbackQuery, state: FSMCon
     """Финальное создание заявки"""
     await callback.answer()
     data = await state.get_data()
+
+    # Показываем индикатор отправки и убираем кнопки
+    try:
+        await callback.message.edit_text("⏳ Отправляю заявку...")
+    except Exception:
+        pass
     
     # Формируем JSON для логирования
     uploaded_files = data.get("uploaded_files", [])
@@ -2701,25 +2694,27 @@ async def finalize_request_callback(callback: types.CallbackQuery, state: FSMCon
         logger.info(f"API Response: {response.status_code} - {response.text}")
         
         if response.status_code == 200 or response.status_code == 201:
-            # Удаляем кнопки и отправляем сообщение об успехе
-            await callback.message.edit_text("✅ Заявка успешно создана!")
+            # Удаляем сообщение с загрузкой и отправляем новое сообщение об успехе
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.message.answer("✅ Заявка успешно создана!")
         else:
-            # Ошибка создания заявки
             await callback.message.edit_text(
-                f"❌ **Ошибка создания заявки**\n\n"
-                f"Код ошибки: {response.status_code}\n"
-                f"Попробуйте создать заявку позже или обратитесь к администратору."
+                "❌ Не удалось создать заявку. Проблемы на стороне Итилиума. Обратитесь к администратору."
             )
         
         await state.clear()
         
     except Exception as e:
         logger.error(f"Error creating marketing request: {e}")
-        await callback.message.edit_text(
-            "❌ **Ошибка создания заявки**\n\n"
-            "Не удалось создать заявку. Попробуйте позже или обратитесь к администратору."
-        )
-        await state.clear()
+        try:
+            await callback.message.edit_text(
+                "❌ Не удалось создать заявку. Проблемы на стороне Итилиума. Обратитесь к администратору."
+            )
+        finally:
+            await state.clear()
 
 
 @new_user_router.callback_query(F.data == "back_to_preview")

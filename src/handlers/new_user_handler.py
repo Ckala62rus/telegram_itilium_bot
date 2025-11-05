@@ -1844,6 +1844,7 @@ async def start_marketing_request_callback(callback: types.CallbackQuery, state:
     await loading_msg.delete()
     
     # Создаем inline кнопки для сервисов с эмодзи
+    # Используем индекс вместо полного названия, чтобы избежать превышения лимита callback_data (64 байта)
     service_emojis = {
         "Дизайн": "🎨",
         "Мероприятие": "🎉", 
@@ -1854,10 +1855,11 @@ async def start_marketing_request_callback(callback: types.CallbackQuery, state:
     }
     
     service_buttons = {}
-    for service in services:
+    for index, service in enumerate(services):
         service_name = service["КомпонентаУслуги"]
         emoji = service_emojis.get(service_name, "📋")
-        service_buttons[f"{emoji} {service_name}"] = f"select_service_{service_name}"
+        # Используем индекс для callback_data, чтобы избежать превышения лимита 64 байта
+        service_buttons[f"{emoji} {service_name}"] = f"select_service_{index}"
     service_buttons["🔙 Назад"] = "back_to_request_type"
     service_buttons["❌ Отмена"] = "cancel_marketing"
     
@@ -1878,22 +1880,22 @@ async def choose_service_callback(callback: types.CallbackQuery, state: FSMConte
     """Обработка выбора сервиса"""
     await callback.answer()
     
-    # Извлекаем название сервиса из callback data
-    service_name = callback.data.replace("select_service_", "")
+    # Извлекаем индекс сервиса из callback data
+    try:
+        service_index = int(callback.data.replace("select_service_", ""))
+    except ValueError:
+        await callback.message.answer("Ошибка выбора сервиса. Попробуйте еще раз.")
+        return
     
     data = await state.get_data()
     services = data.get("services", [])
     
-    # Находим выбранный сервис
-    selected_service = None
-    for service in services:
-        if service["КомпонентаУслуги"] == service_name:
-            selected_service = service
-            break
-    
-    if not selected_service:
+    # Находим выбранный сервис по индексу
+    if service_index < 0 or service_index >= len(services):
         await callback.message.answer("Сервис не найден. Попробуйте еще раз.")
         return
+    
+    selected_service = services[service_index]
     
     # Сохраняем выбранный сервис
     await state.update_data(selected_service=selected_service)

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 from middleware.db_middleware import (
     ExecuteTimeHandlerMiddleware,
 )
+from middleware.user_access_middleware import UserAccessMiddleware
 
 storage = MemoryStorage()
 bot = Bot(token=settings.BOT_TOKEN)
@@ -84,6 +85,9 @@ async def main():
     # scheduler.start()
 
     logger.debug('init middlewares')
+    access_middleware = UserAccessMiddleware()
+    dp.message.middleware(access_middleware)
+    dp.callback_query.middleware(access_middleware)
     dp.update.middleware(ExecuteTimeHandlerMiddleware())
     logger.debug('end init middlewares')
 

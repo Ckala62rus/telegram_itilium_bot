@@ -33,6 +33,24 @@ class ItiliumBaseApi:
             return -1
 
     @staticmethod
+    async def find_employee_by_attribute(
+            identifier: int,
+            attribute_code: str = 'telegram'
+    ) -> Response:
+        """
+        Базовый метод запроса find_employee с логированием.
+        """
+        payload = {attribute_code: identifier}
+        logger.info("Делаем запрос в Итилиум find_employee с параметрами: %s", payload)
+        response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, payload)
+        logger.info(
+            "Пришел ответ find_employee. Код: %s | Тело: %s",
+            response.status_code,
+            response.text
+        )
+        return response
+
+    @staticmethod
     async def get_employee_data_by_identifier(
             message: Message | CallbackQuery,
             attribute_code='telegram'
@@ -44,22 +62,22 @@ class ItiliumBaseApi:
         :return: возвращает json-объект типа employee$employee или null
         """
         try:
-            post_data = {attribute_code: message.from_user.id}
-
-            logger.debug(f"get_employee_data_by_identifier {ApiUrls.FIND_EMPLOYEE_URL}")
-
-            response: Response = await ItiliumBaseApi.send_request("POST", ApiUrls.FIND_EMPLOYEE_URL, post_data)
-
-            if response.status_code == httpx.codes.FORBIDDEN:
-                await message.message.answer(f"Доступ запрещён.")
+            response: Response = await ItiliumBaseApi.find_employee_by_attribute(
+                identifier=message.from_user.id,
+                attribute_code=attribute_code
+            )
 
             logger.debug(f"response code: {response.status_code} | response text: {response.text}")
-            
-            if ItiliumBaseApi.check_response(response.status_code) == 1 and len(response.text) != 0:
-                return json.loads(response.text)
-            else:
-                logger.debug(f"Empty or invalid response from Itilium")
-                return None
+
+            if response.status_code == httpx.codes.OK and len(response.text) != 0:
+                try:
+                    return json.loads(response.text)
+                except json.JSONDecodeError as decode_error:
+                    logger.error(f"Не удалось преобразовать ответ find_employee: {decode_error}")
+                    return None
+
+            logger.debug("Empty or invalid response from Itilium")
+            return None
         except Exception as e:
             logger.error(e)
             # Пробрасываем ошибку для обработки в handlers
@@ -87,6 +105,20 @@ class ItiliumBaseApi:
             request_data["files"] = json.dumps(files)
 
         return await ItiliumBaseApi.send_request("POST", url, request_data)
+
+    @staticmethod
+    async def create_registration_request(data: dict) -> Response:
+        """
+        Создание заявки на регистрацию пользователя.
+        """
+        logger.info("Делаем запрос в Итилиум registration с параметрами: %s", data)
+        response = await ItiliumBaseApi.send_request("POST", ApiUrls.REGISTRATION, data)
+        logger.info(
+            "Пришел ответ registration. Код: %s | Тело: %s",
+            response.status_code,
+            response.text
+        )
+        return response
 
     @staticmethod
     async def send_request(

@@ -145,7 +145,11 @@ async def submit_registration(
 
     try:
         response = await ItiliumBaseApi.create_registration_request(payload)
-        if response.status_code in (httpx.codes.OK, httpx.codes.CREATED):
+        if response.status_code in (
+            httpx.codes.OK,
+            httpx.codes.CREATED,
+            httpx.codes.NO_CONTENT,
+        ):
             await target_message.edit_text(MessageTemplates.REGISTRATION_SUCCESS)
         else:
             logger.error(

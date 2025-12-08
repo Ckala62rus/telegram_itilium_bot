@@ -126,6 +126,29 @@ class Helpers:
         return file_path
 
     @staticmethod
+    @staticmethod
+    def _prepare_marketing_preview(description: str | None, limit: int = 64) -> str:
+        """
+        Возвращает усечённое описание для маркетинговых заявок.
+        Длина возвращаемой строки не превышает limit и всегда
+        включает троеточие, если произошла обрезка.
+        """
+        if not description:
+            return ""
+
+        cleaned = re.sub(re.compile('<.*?>'), '', description).strip()
+        if not cleaned:
+            return ""
+
+        if len(cleaned) <= limit:
+            return cleaned
+
+        if limit <= 3:
+            return "..."[:limit]
+
+        return f"{cleaned[:limit - 3].rstrip()}..."
+
+    @staticmethod
     async def get_paginated_kb_scs(scs: list, page: int = 0) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
 
@@ -135,9 +158,16 @@ class Helpers:
 
         for elem in scs[start_offset:end_offset]:
             sc = json.loads(elem)
+            button_text = f"({sc.get('number')}) {sc.get('shortDescription', '')}"
+
+            if sc.get("marketing") and sc.get("description"):
+                preview = Helpers._prepare_marketing_preview(sc.get("description"))
+                if preview:
+                    button_text = f"{button_text} — {preview}"
+
             builder.row(InlineKeyboardButton(
-                text=f"({sc["number"]}) {sc["shortDescription"]}",
-                callback_data=f"show_sc${sc["number"]}"
+                text=button_text,
+                callback_data=f"show_sc${sc.get('number')}"
             ))
 
         buttons_row = []

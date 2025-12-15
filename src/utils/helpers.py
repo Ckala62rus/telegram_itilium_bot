@@ -126,7 +126,6 @@ class Helpers:
         return file_path
 
     @staticmethod
-    @staticmethod
     def _prepare_marketing_preview(description: str | None, limit: int = 64) -> str:
         """
         Возвращает усечённое описание для маркетинговых заявок.
@@ -149,6 +148,34 @@ class Helpers:
         return f"{cleaned[:limit - 3].rstrip()}..."
 
     @staticmethod
+    def _deserialize_sc(entry: object) -> dict | None:
+        """
+        Приводит элемент из Redis/ответа API к словарю заявки.
+        Поддерживаются dict, bytes и str (JSON).
+        """
+        if isinstance(entry, dict):
+            return entry
+
+        if isinstance(entry, (bytes, bytearray)):
+            try:
+                entry = entry.decode()
+            except Exception:
+                return None
+
+        if isinstance(entry, str):
+            try:
+                entry = json.loads(entry)
+            except json.JSONDecodeError:
+                logger.warning("Не удалось распарсить данные заявки: %s", entry)
+                return None
+
+        if isinstance(entry, dict):
+            return entry
+
+        logger.warning("Неподдерживаемый формат заявки: %s", type(entry))
+        return None
+
+    @staticmethod
     async def get_paginated_kb_scs(scs: list, page: int = 0) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
 
@@ -157,7 +184,9 @@ class Helpers:
         count_page = len(scs)
 
         for elem in scs[start_offset:end_offset]:
-            sc = json.loads(elem)
+            sc = Helpers._deserialize_sc(elem)
+            if not sc:
+                continue
             button_text = f"({sc.get('number')}) {sc.get('shortDescription', '')}"
 
             if sc.get("marketing") and sc.get("description"):
@@ -193,10 +222,12 @@ class Helpers:
         count_page = len(scs)
 
         for elem in scs[start_offset:end_offset]:
-            sc = json.loads(elem)
+            sc = Helpers._deserialize_sc(elem)
+            if not sc:
+                continue
             builder.row(InlineKeyboardButton(
-                text=f"({sc["number"]}) {sc["shortDescription"]}",
-                callback_data=f"show_sc${sc["number"]}"
+                text=f"({sc.get('number')}) {sc.get('shortDescription', '')}",
+                callback_data=f"show_sc${sc.get('number')}"
             ))
 
         buttons_row = []

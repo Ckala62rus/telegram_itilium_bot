@@ -1,12 +1,12 @@
 import json
 import logging
 import re
+from contextlib import suppress
 
 import httpx
 from aiogram import types, Router, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram_dialog import DialogManager, StartMode
 from httpx import Response
 
 from api.itilium_api import ItiliumBaseApi
@@ -18,7 +18,16 @@ from dto.paginate_scs_responsible_dto import PaginateResponsibleScsDTO
 from dto.paginate_teams_dto import PaginateTeamsDTO
 from dto.paginate_marketing_subdivisions_dto import PaginateMarketingSubdivisionsDTO
 from filters.chat_types import ChatTypeFilter
-from fsm.user_fsm import CreateNewIssue, CreateComment, SearchSC, LoadPagination, ConfirmSc, LoadPaginationResponsible
+from aiogram_dialog import DialogManager, StartMode
+from fsm.user_fsm import (
+    CreateNewIssue,
+    CreateComment,
+    SearchSC,
+    LoadPagination,
+    ConfirmSc,
+    LoadPaginationResponsible,
+    DaxRequest,
+)
 from fsm.marketing_fsm import MarketingRequest
 from kbds.inline import get_callback_btns
 from kbds.reply import get_keyboard
@@ -121,6 +130,230 @@ async def handle_marketing_file_upload(message: types.Message, state: FSMContext
         await message.answer("❌ Ошибка при загрузке файла. Попробуйте еще раз.")
 
 
+def _build_dax_summary_text(description: str, files: list[dict[str, str]]) -> str:
+    description = description or "—"
+    lines = [
+        "Описание:",
+        description,
+        "",
+        MessageTemplates.DAX_FILES_HINT,
+        "",
+        f"Прикреплено файлов: {len(files)}",
+    ]
+    if files:
+        for idx, file_item in enumerate(files, start=1):
+            lines.append(f"{idx}. {file_item.get('filename') or file_item.get('path') or 'без имени'}")
+    else:
+        lines.append("Файлы не прикреплены")
+    return "\n".join(lines)
+
+
+def _dax_controls_keyboard():
+    return get_callback_btns(
+        btns={
+            "Продолжить ➡️": "dax_confirm",
+            "Очистить файлы 🗑": "dax_clear_files",
+            "Отмена ❌": "dax_cancel",
+        },
+        size=(1, 1, 1),
+    )
+
+
+async def _delete_dax_summary_message(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    data = await state.get_data()
+    summary_id = data.get("dax_summary_message_id")
+    if summary_id:
+        with suppress(Exception):
+            await bot.delete_message(chat_id=message.chat.id, message_id=summary_id)
+        await state.update_data(dax_summary_message_id=None)
+
+
+async def _send_or_edit_dax_summary(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    data = await state.get_data()
+    description = data.get("dax_description", "")
+    files = data.get("dax_files", [])
+    summary_id = data.get("dax_summary_message_id")
+
+    text = _build_dax_summary_text(description, files)
+    keyboard = _dax_controls_keyboard()
+
+    if summary_id:
+        with suppress(Exception):
+            await bot.delete_message(chat_id=message.chat.id, message_id=summary_id)
+
+    sent_message = await bot.send_message(
+        chat_id=message.chat.id,
+        text=text,
+        reply_markup=keyboard,
+    )
+    await state.update_data(dax_summary_message_id=sent_message.message_id)
+
+
+@new_user_router.callback_query(F.data == "create_dax_issue")
+async def start_dax_request_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+):
+    await callback.answer()
+    await state.clear()
+    await state.set_state(DaxRequest.description)
+    await state.update_data(dax_files=[], dax_summary_message_id=None)
+    await callback.message.answer(
+        MessageTemplates.DAX_DESCRIPTION_PROMPT,
+        reply_markup=get_callback_btns(btns={"Отмена ❌": "dax_cancel"}, size=(1,)),
+    )
+
+
+@new_user_router.message(DaxRequest.description)
+async def dax_set_description(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+):
+    description = (message.text or "").strip()
+    if not description:
+        await message.answer("Описание не может быть пустым. Введите текст ещё раз.")
+        return
+
+    await state.update_data(
+        dax_description=description,
+        dax_files=[],
+    )
+    await state.set_state(DaxRequest.files)
+    await _send_or_edit_dax_summary(message, state, bot)
+
+
+@new_user_router.message(DaxRequest.files)
+async def dax_handle_files(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+):
+    has_file = any(
+        [
+            message.photo,
+            message.document,
+            message.video,
+            message.voice,
+            message.audio,
+            message.video_note,
+        ]
+    )
+
+    if not has_file:
+        await message.answer("Чтобы добавить файл, отправьте документ, фото, видео или голосовое сообщение.")
+        return
+
+    file_path = await Helpers.get_file_info(message, bot)
+    if not file_path:
+        await message.answer("Не удалось получить файл. Попробуйте ещё раз.")
+        return
+
+    data = await state.get_data()
+    files: list = data.get("dax_files", [])
+
+    if message.document:
+        filename = message.document.file_name or "Документ"
+    elif message.photo:
+        filename = f"Фото_{len(files) + 1}"
+    elif message.video:
+        filename = message.video.file_name or "Видео"
+    elif message.audio:
+        filename = message.audio.file_name or "Аудио"
+    elif message.voice:
+        filename = "Голосовое сообщение"
+    elif message.video_note:
+        filename = "Видео сообщение"
+    else:
+        filename = file_path
+
+    files.append({"path": file_path, "filename": filename})
+    await state.update_data(dax_files=files)
+    await _send_or_edit_dax_summary(message, state, bot)
+
+
+@new_user_router.callback_query(StateFilter(DaxRequest.files), F.data == "dax_clear_files")
+async def dax_clear_files_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+):
+    await callback.answer("Список файлов очищен")
+    await state.update_data(dax_files=[])
+    await _send_or_edit_dax_summary(callback.message, state, bot)
+
+
+@new_user_router.callback_query(
+    StateFilter(DaxRequest.description, DaxRequest.files),
+    F.data == "dax_cancel",
+)
+async def dax_cancel_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+):
+    await callback.answer("Действия отменены")
+    await _delete_dax_summary_message(callback.message, state, bot)
+    await state.clear()
+    await callback.message.answer(MessageTemplates.ACTIONS_CANCELED)
+
+
+@new_user_router.callback_query(StateFilter(DaxRequest.files), F.data == "dax_confirm")
+async def dax_confirm_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+):
+    await callback.answer()
+    data = await state.get_data()
+    description = data.get("dax_description")
+    files = data.get("dax_files", [])
+
+    if not description:
+        await callback.message.answer("Описание отсутствует. Введите описание заново.")
+        return
+
+    try:
+        user_data = await ItiliumBaseApi.get_employee_data_by_identifier(callback)
+    except Exception as exc:
+        logger.exception("Ошибка получения данных пользователя для DAX: %s", exc)
+        await callback.message.answer(MessageTemplates.ITILIUM_ERROR)
+        return
+
+    if not user_data:
+        await callback.message.answer(MessageFormatter.user_not_found_itilium(callback.from_user.id))
+        return
+
+    payload = {
+        "UUID": user_data["UUID"],
+        "Description": description,
+    }
+
+    waiting_message = await callback.message.answer("Отправляю заявку по DAX...")
+
+    try:
+        response = await ItiliumBaseApi.create_dax_sc(payload, files)
+        if response.status_code in (httpx.codes.OK, httpx.codes.CREATED, httpx.codes.NO_CONTENT):
+            await waiting_message.edit_text(MessageTemplates.DAX_REQUEST_SUCCESS)
+        else:
+            logger.error("Ошибка создания DAX заявки: %s | %s", response.status_code, response.text)
+            await waiting_message.edit_text(MessageTemplates.DAX_REQUEST_FAILED)
+    except Exception as exc:
+        logger.exception("Не удалось отправить DAX заявку: %s", exc)
+        await waiting_message.edit_text(MessageTemplates.DAX_REQUEST_FAILED)
+    finally:
+        await _delete_dax_summary_message(callback.message, state, bot)
+        await state.clear()
+
+
 @new_user_router.message(CommandStart())
 async def start_command(message: types.Message):
     """
@@ -187,17 +420,24 @@ async def crate_new_issue_command(callback: types.CallbackQuery, state: FSMConte
         # Удаляем индикатор загрузки
         await loading_msg.delete()
         
-        if user_data and user_data.get('canCreateMarketingRequests', False):
-            # Пользователь может создавать маркетинговые заявки
+        can_marketing = bool(user_data and user_data.get('canCreateMarketingRequests', False))
+        can_dax = bool(user_data and user_data.get('canCreateDaxRequests', False))
+
+        if can_marketing or can_dax:
+            btns = {
+                "Заявка в отдел ИТ": "create_regular_issue",
+            }
+            if can_marketing:
+                btns["Заявка в отдел маркетинга"] = "create_marketing_issue"
+            if can_dax:
+                btns["Заявка по DAX"] = "create_dax_issue"
+            btns["❌ Отмена"] = "cancel_marketing"
+
             await callback.message.answer(
                 text="Выберите тип заявки:",
                 reply_markup=get_callback_btns(
-                    btns={
-                        "Заявка в отдел ИТ": "create_regular_issue",
-                        "Заявка в отдел маркетинга": "create_marketing_issue",
-                        "❌ Отмена": "cancel_marketing"
-                    },
-                    size=(1, 1, 1)
+                    btns=btns,
+                    size=(1, 1, 1, 1)
                 )
             )
             await state.set_state(MarketingRequest.CHOOSE_REQUEST_TYPE)

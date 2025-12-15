@@ -107,6 +107,24 @@ class ItiliumBaseApi:
         return await ItiliumBaseApi.send_request("POST", url, request_data)
 
     @staticmethod
+    async def create_dax_sc(data: dict, files: list) -> Response:
+        """
+        Создание заявки по DAX.
+        """
+        logger.info(f"Создаем заявку по DAX: {data}")
+
+        request_data = {
+            "client": data["UUID"],
+            "shorDescription": Helpers.prepare_short_description_for_sc(data['Description']),
+            "Description": data['Description']
+        }
+
+        if len(files) > 0:
+            request_data["files"] = json.dumps(files)
+
+        return await ItiliumBaseApi.send_request("POST", ApiUrls.CREATE_SC_DAX, request_data)
+
+    @staticmethod
     async def create_registration_request(data: dict) -> Response:
         """
         Создание заявки на регистрацию пользователя.

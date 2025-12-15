@@ -8,6 +8,7 @@ __all__ = [
     'CreateNewIssue',
     'CreateComment',
     'SearchSC',
+    'DaxRequest',
 ]
 
 
@@ -51,3 +52,8 @@ class ConfirmSc(StatesGroup):
     comment = State()
     message_with_choice_grade = State()
     messages_ids = State()
+
+
+class DaxRequest(StatesGroup):
+    description = State()
+    files = State()

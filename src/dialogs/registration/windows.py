@@ -21,8 +21,7 @@ def request_telegram() -> Window:
         Format(
             "{reg_required}\n\n"
             "Я определил ваш Telegram ID: <b>{telegram_id}</b>.\n"
-            "Если всё верно, нажмите кнопку ниже.\n"
-            "При необходимости отправьте другое значение (например, @username или номер телефона)."
+            "Если всё верно, нажмите кнопку ниже."
         ),
         TextInput(
             id="registration_telegram",

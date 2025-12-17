@@ -1,28 +1,28 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    TZ=Europe/Moscow
 
 WORKDIR /src
 
-COPY ./src/pyproject.toml \
-    ./src/poetry.lock /src/
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY ./src .
+COPY ./src/pyproject.toml ./src/poetry.lock /src/
 
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir poetry==1.8.3 poetry-plugin-export \
+    && poetry export --without-hashes -f requirements.txt -o /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -rf /root/.cache/pip
 
-RUN apk --update add mc curl curl bash nano
+COPY ./src /src
 
-RUN pip install poetry && pip install poetry-plugin-export
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
 
-RUN apk --update add \
-#    && pip install poetry \
-#    && pip install poetry-plugin-export \
-    && curl -sSL https://install.python-poetry.org | python3 - \
-    && pip install poetry \
-    && poetry export --without-hashes -f requirements.txt --output requirements.txt \
-    && pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple \
-    && pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/cache/apt
-
-ENV TZ = Europa/Moscow
-
-CMD ["timedatectl", "set-timezone", "Europe/Moscow"]
+CMD ["python", "app.py"]

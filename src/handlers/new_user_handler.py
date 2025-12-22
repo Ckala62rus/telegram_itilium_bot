@@ -5,6 +5,7 @@ from contextlib import suppress
 
 import httpx
 from aiogram import types, Router, F, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from httpx import Response
@@ -157,6 +158,222 @@ def _dax_controls_keyboard():
         },
         size=(1, 1, 1),
     )
+
+
+def _get_sc_action_buttons(
+    sc_number: str,
+    *,
+    can_change_status: bool,
+    can_change_responsible: bool,
+) -> dict[str, str]:
+    btns: dict[str, str] = {
+        MessageTemplates.HIDE_INFO: "del_message",
+    }
+
+    if can_change_status:
+        btns[MessageTemplates.CHANGE_STATUS] = f"show_state${sc_number}"
+
+    btns[MessageTemplates.COMMENT_BUTTON] = f"add_comment${sc_number}"
+
+    if can_change_responsible:
+        btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
+
+    return btns
+
+
+def _build_comment_summary_text(
+    sc_number: str | None,
+    comment: str | None,
+    files: list | None,
+) -> str:
+    comment_text = (comment or "").strip() or "—"
+    files = files or []
+
+    lines = []
+
+    if sc_number:
+        lines.append(f"Заявка № {sc_number}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "Комментарий:",
+            comment_text,
+            "",
+            f"Прикреплено файлов: {len(files)}",
+        ]
+    )
+
+    if files:
+        for idx, file_item in enumerate(files, start=1):
+            if isinstance(file_item, dict):
+                name = file_item.get("filename") or file_item.get("path") or "без имени"
+            else:
+                name = str(file_item)
+            lines.append(f"{idx}. {name}")
+    else:
+        lines.append("Файлы не прикреплены")
+
+    lines.extend(
+        [
+            "",
+            "Используйте кнопки ниже, чтобы добавить файлы или отправить комментарий.",
+        ]
+    )
+
+    return "\n".join(lines)
+
+
+def _comment_controls_keyboard(has_files: bool):
+    clear_label = "Удалить файлы 🗑" if has_files else "Удалить файлы 🗑"
+    return get_callback_btns(
+        btns={
+            "Отправить комментарий 📩": "comment_send",
+            "Добавить файл 📎": "comment_add_file",
+            clear_label: "comment_clear_files",
+            "Отмена ❌": "cancel",
+        },
+        size=(1, 1, 1, 1),
+    )
+
+
+async def _delete_comment_summary_message(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    data = await state.get_data()
+    summary_id = data.get("comment_summary_message_id")
+
+    if summary_id:
+        with suppress(Exception):
+            await bot.delete_message(chat_id=message.chat.id, message_id=summary_id)
+        await state.update_data(comment_summary_message_id=None)
+
+
+async def _send_or_edit_comment_summary(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    data = await state.get_data()
+    comment = data.get("comment")
+    files = data.get("files", [])
+    sc_number = data.get("sc_id")
+    summary_id = data.get("comment_summary_message_id")
+
+    text = _build_comment_summary_text(sc_number, comment, files)
+    keyboard = _comment_controls_keyboard(has_files=bool(files))
+
+    if summary_id:
+        with suppress(Exception):
+            await bot.delete_message(chat_id=message.chat.id, message_id=summary_id)
+
+    sent_message = await bot.send_message(
+        chat_id=message.chat.id,
+        text=text,
+        reply_markup=keyboard,
+    )
+    await state.update_data(comment_summary_message_id=sent_message.message_id)
+
+
+def _normalize_comment_files(files: list | None) -> list[str]:
+    result: list[str] = []
+    if not files:
+        return result
+
+    for item in files:
+        if isinstance(item, dict):
+            path = item.get("path")
+            if path:
+                result.append(path)
+        elif isinstance(item, str):
+            result.append(item)
+
+    return result
+
+
+async def _start_comment_flow(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    sc_number: str,
+) -> None:
+    await state.clear()
+    await state.set_state(CreateComment.comment)
+    await state.update_data(
+        sc_id=sc_number,
+        files=[],
+        comment=None,
+        comment_summary_message_id=None,
+    )
+
+    await callback.answer()
+    await callback.message.answer(
+        f"Введите текст комментария для заявки № {sc_number}.",
+        reply_markup=get_callback_btns(btns={MessageTemplates.CANCEL_BUTTON: "cancel"}, size=(1,)),
+    )
+
+
+async def _send_comment_to_itilium(
+    interaction_user_id: int,
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    async def _safe_edit_or_send(msg: types.Message, text: str):
+        try:
+            await msg.edit_text(text)
+        except TelegramBadRequest:
+            with suppress(Exception):
+                await msg.delete()
+            await bot.send_message(chat_id=msg.chat.id, text=text)
+        except Exception:
+            with suppress(Exception):
+                await msg.delete()
+            await bot.send_message(chat_id=msg.chat.id, text=text)
+
+    data = await state.get_data()
+    sc_number = data.get("sc_id")
+    comment_text = (data.get("comment") or "").strip()
+    files = _normalize_comment_files(data.get("files", []))
+
+    if not sc_number:
+        await message.answer("Не удалось определить заявку. Откройте её и попробуйте снова.")
+        await _delete_comment_summary_message(message, state, bot)
+        await state.clear()
+        return
+
+    if not comment_text:
+        await message.answer("Комментарий пуст. Введите текст комментария.")
+        return
+
+    waiting_message = await message.answer(
+        text="Идёт отправка комментария...",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+
+    try:
+        response: Response = await ItiliumBaseApi.add_comment_to_sc(
+            telegram_user_id=interaction_user_id,
+            comment=comment_text,
+            sc_number=sc_number,
+            files=files,
+        )
+
+        logger.debug("send comment to 1C itilium")
+
+        if response.status_code not in (httpx.codes.OK, httpx.codes.CREATED, httpx.codes.NO_CONTENT):
+            logger.error(f"Failed to add comment: {response.status_code} | {response.text}")
+            await _safe_edit_or_send(waiting_message, "Не удалось добавить комментарий. Попробуйте позже.")
+            return
+
+        await _safe_edit_or_send(waiting_message, "Комментарий добавлен")
+    except Exception as e:
+        await _safe_edit_or_send(waiting_message, "Проблемы на стороне Итилиума. Обратитесь к администратору.")
+        logger.exception(e)
+    finally:
+        await _delete_comment_summary_message(message, state, bot)
+        await state.clear()
 
 
 async def _delete_dax_summary_message(
@@ -679,6 +896,23 @@ async def btn_reject(callback: types.CallbackQuery):
         await callback.answer("Во время согласования, произошла ошибка. Обратитесь к администратору")
 
 
+@new_user_router.callback_query(StateFilter(None), F.data.startswith("add_comment$"))
+async def add_comment_from_sc_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+):
+    """
+    Обработчик кнопки "Добавить комментарий" в карточке заявки
+    """
+    sc_number = callback.data.split("add_comment$", 1)[1]
+
+    if not sc_number:
+        await callback.answer("Некорректный номер заявки", show_alert=True)
+        return
+
+    await _start_comment_flow(callback, state, sc_number)
+
+
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("reply$"))
 async def btn_reply_for_comment(
         callback: types.CallbackQuery,
@@ -689,16 +923,33 @@ async def btn_reply_for_comment(
     (Кнопки в сообщении "Открыть заявку" и "Добавить комментарий")
     """
     logger.debug(f"callback reply$ {callback.from_user.id} | {callback.data}")
-    await callback.answer()
-    await callback.message.answer(
-        "Введите коментарий или добавьте картинку. Для отмены, нажмите кнопку 'Отмена'",
-        reply_markup=get_callback_btns(btns={
-            "отмена": "cancel"
-        })
-    )
+    sc_number = callback.data[6:]
+    await _start_comment_flow(callback, state, sc_number)
+
+
+@new_user_router.message(StateFilter(CreateComment.comment))
+async def set_comment_text_for_sc(
+        message: types.Message,
+        state: FSMContext,
+        bot: Bot
+):
+    """
+    Получение текста комментария перед добавлением файлов
+    """
+    data = await state.get_data()
+    if not data.get("sc_id"):
+        await message.answer("Не удалось определить заявку. Откройте карточку и попробуйте снова.")
+        await state.clear()
+        return
+
+    comment_text = (message.text or "").strip()
+    if not comment_text:
+        await message.answer("Комментарий не может быть пустым. Введите текст ещё раз.")
+        return
+
+    await state.update_data(comment=comment_text)
     await state.set_state(CreateComment.files)
-    await state.update_data(sc_id=callback.data[6:])
-    await state.update_data(files=[])
+    await _send_or_edit_comment_summary(message, state, bot)
 
 
 @new_user_router.callback_query(StateFilter(CreateComment.files), F.data.startswith("cancel"))
@@ -706,56 +957,83 @@ async def btn_reply_for_comment(
 @new_user_router.callback_query(StateFilter("*"), F.data.startswith("cancel"))
 async def callback_cancel_btn(
         callback: types.CallbackQuery,
-        state: FSMContext
+        state: FSMContext,
+        bot: Bot,
 ):
     """
     Обработчик кнопки "отмена".
     Удаляется сообщение с кнопкой "отмена", так же очищается машина состояние FSM
     """
+    await _delete_comment_summary_message(callback.message, state, bot)
     await state.clear()
     await callback.answer()
-    await callback.message.delete()
+    with suppress(Exception):
+        await callback.message.delete()
+
+
+@new_user_router.callback_query(StateFilter(CreateComment.files), F.data == "comment_add_file")
+async def comment_add_file_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+):
+    """
+    Подсказка для добавления файла к комментарию
+    """
+    await callback.answer()
+    await callback.message.answer(
+        "Пришлите файл сообщением. Поддерживаются фото, документы, видео и голосовые сообщения."
+    )
+
+
+@new_user_router.callback_query(StateFilter(CreateComment.files), F.data == "comment_clear_files")
+async def comment_clear_files_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+        bot: Bot
+):
+    """
+    Очистка списка файлов комментария
+    """
+    data = await state.get_data()
+    files = data.get("files", [])
+    await state.update_data(files=[])
+    await callback.answer("Файлы удалены" if files else "Файлов не было")
+    await _send_or_edit_comment_summary(callback.message, state, bot)
 
 
 @new_user_router.message(F.text == str(UserButtonText.SEND_COMMENT))
 async def send_comment_for_sc_to_itilium(
         message: types.Message,
-        state: FSMContext
+        state: FSMContext,
+        bot: Bot,
 ):
     """
     Обработчик кнопки "Отправить комментарий".
     Так же происходит отправка файлов, приткрепленных к коментарию.
     """
-    await message.answer(
-        text="идёт отправка комментария... ",
-        reply_markup=types.ReplyKeyboardRemove()
+    await _send_comment_to_itilium(
+        interaction_user_id=message.from_user.id,
+        message=message,
+        state=state,
+        bot=bot,
     )
 
-    data: dict = await state.get_data()
 
-    current_state = await state.get_state()
-    logger.debug(f"state {current_state}")
-
-    logger.debug(f"comment: {message.text}")
-    logger.debug(f"files for comment: {data['files']}")
-
-    try:
-        response: Response = await ItiliumBaseApi.add_comment_to_sc(
-            telegram_user_id=message.from_user.id,
-            comment=data.get("comment", 'no comment'),
-            sc_number=data["sc_id"],
-            files=data["files"]
-        )
-
-        logger.debug("send comment to 1C itilium")
-    except Exception as e:
-        await message.answer("Проблемы на стороне Итилиума. Обратитесь к администратору.")
-        logger.error(e)
-
-    await state.clear()
-    await message.answer(
-        text='Комментарий добавлен',
-        reply_markup=types.ReplyKeyboardRemove()
+@new_user_router.callback_query(StateFilter(CreateComment.files), F.data == "comment_send")
+async def comment_send_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+        bot: Bot,
+):
+    """
+    Отправка комментария через кнопку под карточкой заявки
+    """
+    await callback.answer()
+    await _send_comment_to_itilium(
+        interaction_user_id=callback.from_user.id,
+        message=callback.message,
+        state=state,
+        bot=bot,
     )
 
 
@@ -772,41 +1050,69 @@ async def test_filter(
     """
     Обработчик отвечающий за получение названий файлов и подготовку ссылок, через которые Итилиум их скачает.
     """
-    # Исключаем маркетинговые заявки
     current_state = await state.get_state()
+    # Исключаем маркетинговые заявки
     if current_state == MarketingRequest.UPLOAD_FILES:
         logger.info(f"Excluding marketing file upload from test_filter, state: {current_state}")
         return
-    
-    data = await state.get_data()
 
-    if (
-            message.photo or
-            message.video or
-            message.voice or
-            message.document
-    ) is not None:
+    if current_state != CreateComment.files:
+        return
+
+    data = await state.get_data()
+    sc_id = data.get("sc_id")
+
+    if not sc_id:
+        await message.answer("Не удалось определить заявку. Откройте карточку и попробуйте снова.")
+        await state.clear()
+        return
+
+    has_file = any(
+        [
+            message.photo,
+            getattr(message, "video", None),
+            message.voice,
+            message.document,
+            getattr(message, "audio", None),
+            getattr(message, "video_note", None),
+        ]
+    )
+
+    if has_file:
         file_path = await Helpers.get_file_info(message, bot)
-        files: list = data.get("files", [])
+        if not file_path:
+            await message.answer("Не удалось получить файл. Попробуйте ещё раз.")
+            return
+
+        files: list = data.get("files", []) or []
 
         logger.debug(f"files: {files}")
 
-        if files is None:
-            await state.update_data(names=[])
+        if message.document:
+            filename = message.document.file_name or "Документ"
+        elif message.photo:
+            filename = f"Фото_{len(files) + 1}"
+        elif getattr(message, "video", None):
+            filename = message.video.file_name or "Видео"
+        elif getattr(message, "audio", None):
+            filename = message.audio.file_name or "Аудио"
+        elif getattr(message, "voice", None):
+            filename = "Голосовое сообщение"
+        elif getattr(message, "video_note", None):
+            filename = "Видео сообщение"
+        else:
+            filename = file_path
 
-        files.append(file_path)
+        files.append({"path": file_path, "filename": filename})
 
+        await state.update_data(files=files)
         await message.answer("Файл подготовлен к отправке")
+    elif message.text:
+        await state.update_data(comment=message.text.strip())
+    else:
+        return
 
-    await state.update_data(comment=message.text)
-
-    await message.answer(
-        text="Комментарий подготовлен к отправке",
-        reply_markup=get_keyboard(
-            str(UserButtonText.CANCEL),
-            str(UserButtonText.SEND_COMMENT)
-        )
-    )
+    await _send_or_edit_comment_summary(message, state, bot)
 
 
 @new_user_router.callback_query(StateFilter(None), F.data.startswith("show_sc$"))
@@ -837,15 +1143,14 @@ async def show_sc_info_callback(callback: types.CallbackQuery):
     # Формируем текст сообщения
     message_text = Helpers.prepare_sc(response)
 
-    btns: dict = {}
+    can_change_status = response.get("change_status") is True
+    can_change_responsible = response.get("change_responsible") is True
 
-    if response["state"] != 'registered':
-        btns = ButtonTemplates.hide_and_change_status(sc_number)
-        # Добавляем кнопку смены ответственного если поле change_responsible равно true
-        if response.get("change_responsible") == True:
-            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
-    else:
-        btns = ButtonTemplates.hide_info()
+    btns = _get_sc_action_buttons(
+        sc_number=sc_number,
+        can_change_status=can_change_status,
+        can_change_responsible=can_change_responsible,
+    )
 
     btn_keyboard = get_callback_btns(btns=btns, size=(1,))
 
@@ -898,18 +1203,21 @@ async def hide_sc_info_callback(callback: types.CallbackQuery):
     sc_number = callback.data[19:]
     await callback.answer()
 
-    # Восстанавливаем набор кнопок, включая "Сменить ответственного", если доступно
-    btns = {
-        "Скрыть информацию ↩️": "del_message",
-        "Поменять статус 🔁": f"show_state${sc_number}",
-    }
-
+    can_change_status = False
+    can_change_responsible = False
     try:
         response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
-        if response and response.get("change_responsible") is True:
-            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
+        if response:
+            can_change_status = response.get("change_status") is True
+            can_change_responsible = response.get("change_responsible") is True
     except Exception:
         pass
+
+    btns = _get_sc_action_buttons(
+        sc_number=sc_number,
+        can_change_status=can_change_status,
+        can_change_responsible=can_change_responsible,
+    )
 
     btn_keyboard = get_callback_btns(btns=btns, size=(1,))
 
@@ -967,15 +1275,15 @@ async def hide_sc_info_callback(
         response: dict | None = await ItiliumBaseApi.find_sc_by_id(callback.from_user.id, sc_number)
         
         # Формируем кнопки
-        btns = {
-            "Скрыть информацию ↩️": "del_message",
-            "Поменять статус 🔁": f"show_state${sc_number}",
-        }
-        
-        # Добавляем кнопку смены ответственного если поле change_responsible равно true
-        if response and response.get("change_responsible") == True:
-            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
-        
+        can_change_status = bool(response and response.get("change_status") is True)
+        can_change_responsible = bool(response and response.get("change_responsible") is True)
+
+        btns = _get_sc_action_buttons(
+            sc_number=sc_number,
+            can_change_status=can_change_status,
+            can_change_responsible=can_change_responsible,
+        )
+
         btn_keyboard = get_callback_btns(btns=btns, size=(1,))
         
         # Формируем текст сообщения
@@ -1430,14 +1738,11 @@ async def cancel_change_responsible_callback(
         message_text = Helpers.prepare_sc(response)
         
         # Формируем кнопки
-        btns = {
-            "Скрыть информацию ↩️": "del_message",
-            "Поменять статус 🔁": f"show_state${sc_number}",
-        }
-        
-        # Добавляем кнопку смены ответственного если поле change_responsible равно true
-        if response.get("change_responsible") == True:
-            btns["Сменить ответственного 👤"] = f"change_responsible${sc_number}"
+        btns = _get_sc_action_buttons(
+            sc_number=sc_number,
+            can_change_status=response.get("change_status") is True,
+            can_change_responsible=response.get("change_responsible") is True,
+        )
         
         btn_keyboard = get_callback_btns(btns=btns, size=(1,))
         

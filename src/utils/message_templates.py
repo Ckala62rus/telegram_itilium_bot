@@ -65,6 +65,7 @@ class MessageTemplates(StrEnum):
     HIDE_INFO = "Скрыть информацию ↩️"
     CHANGE_STATUS = "Поменять статус 🔁"
     CANCEL_BUTTON = "отмена ❌"
+    COMMENT_BUTTON = "Добавить комментарий 💬"
     ADD_COMMENT = "добавить комментарий 📃"
     SEND_GRADE = "отправить оценку 📩"
 

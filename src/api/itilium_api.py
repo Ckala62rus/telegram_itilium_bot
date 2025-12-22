@@ -143,19 +143,22 @@ class ItiliumBaseApi:
             method: str,
             url: str,
             data: dict | None,
-            params=None
+            params=None,
+            json_data: dict | None = None,
     ) -> Response:
         """
         Базовый метод, обёртка над httpx
         """
         logger.debug(f"send_request {method} {settings.ITILIUM_URL + url}")
         logger.debug(f"send_request data {data}")
+        logger.debug(f"send_request json {json_data}")
 
         try:
             response = await log_and_request(
                 method=method,
                 url=settings.ITILIUM_URL + url,
                 data=data,
+                json=json_data,
                 params=params,
                 auth=(settings.ITILIUM_LOGIN, settings.ITILIUM_PASSWORD)
             )
@@ -234,19 +237,16 @@ class ItiliumBaseApi:
         logger.debug(f"url: {url}")
         logger.debug(f"comment: {comment}")
 
-        data: dict | None = None
+        files_payload: list[dict[str, str]] | list[str] = files or []
 
-        if len(files) > 0:
-            url_params = ";".join(files)
-            url += f"&files={url_params}"
-            logger.debug(f"url: {url}")
+        # 1С на add_comment читает JSON из тела. Передаем список путей через ';' строкой.
+        files_str = ";".join(
+            [item["path"] if isinstance(item, dict) else str(item) for item in files_payload]
+        )
+        json_body = {"files": files_str}
+        logger.debug(f"files payload (json body): {json_body}")
 
-        return await (ItiliumBaseApi
-        .send_request(
-            "POST",
-            url,
-            data
-        ))
+        return await ItiliumBaseApi.send_request("POST", url, data=None, json_data=json_body)
 
     @staticmethod
     async def confirm_sc(
